@@ -17,8 +17,10 @@ version = "3.0.0b9"
 description = "Modern and fully asynchronous framework for Telegram Bot API"
 optional = false
 python-versions = ">=3.8"
-files = []
-develop = false
+files = [
+    {file = "aiogram-3.0.0b9-py3-none-any.whl", hash = "sha256:cc100403d583aa4360ccc2b8d0430ccb7f7f3378dba6ce303e3d552cc498b37c"},
+    {file = "aiogram-3.0.0b9.tar.gz", hash = "sha256:fba3df7e795e91f15f5226ef352d97701129d1e4173c08ff4fc09db02b5583b4"},
+]
 
 [package.dependencies]
 aiofiles = ">=23.1.0,<23.2.0"
@@ -35,12 +37,6 @@ i18n = ["babel (>=2.12.1,<2.13.0)"]
 proxy = ["aiohttp-socks (>=0.8.0,<0.9.0)"]
 redis = ["redis (>=4.6.0,<4.7.0)"]
 test = ["aresponses (>=2.1.6,<2.2.0)", "pytest (>=7.4.0,<7.5.0)", "pytest-aiohttp (>=1.0.4,<1.1.0)", "pytest-asyncio (>=0.21.0,<0.22.0)", "pytest-cov (>=4.0.0,<4.1.0)", "pytest-html (>=3.2.0,<3.3.0)", "pytest-lazy-fixture (>=0.6.3,<0.7.0)", "pytest-mock (>=3.10.0,<3.11.0)", "pytest-mypy (>=0.10.0,<0.11.0)", "pytz (>=2022.7.1,<2022.8.0)"]
-
-[package.source]
-type = "git"
-url = "https://github.com/aiogram/aiogram.git"
-reference = "HEAD"
-resolved_reference = "baad0ebef2c2c5ebd98417662e0d5eaf3c5910ad"
 
 [[package]]
 name = "aiohttp"
@@ -808,4 +804,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "6ec9e25fa3aeb3f2e374fd6344f5dda343308108f170dddae0b1598f5162b009"
+content-hash = "42b9ea9f597793aa283933c8add45453d876b2426b6d92e9788df9e050bab104"

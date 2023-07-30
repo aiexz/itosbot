@@ -33,4 +33,4 @@ RUN ./.venv/bin/pip install /app/dist/*.whl
 
 COPY src ./src
 
-ENTRYPOINT ["./.venv/bin/python", "src/main.py"]
+ENTRYPOINT ["./.venv/bin/python", "-m", "src"]

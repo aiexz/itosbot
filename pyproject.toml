@@ -7,7 +7,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-aiogram = { git = "https://github.com/aiogram/aiogram.git" }
+aiogram = { version = "^3.0.0b9", allow-prereleases = true }
 pydantic-settings = "^2.0.2"
 pillow = "^10.0.0"
 
