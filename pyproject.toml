@@ -7,10 +7,9 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-aiogram = { version = "^3.0.0b9", allow-prereleases = true }
+aiogram = "^3.0.0"
 pydantic-settings = "^2.0.2"
 pillow = "^10.0.0"
-
 
 
 [build-system]
