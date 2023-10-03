@@ -1,25 +1,25 @@
 version: '3.7'
 
 services:
-#  api:
-#    image: aiogram/telegram-bot-api:latest
-#    restart: always
-#    environment:
-#      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
-#      - TELEGRAM_API_HASH=${TELEGRAM_API_ID}
-#    env_file:
-#      - .env
-#    volumes:
-#      - telegram-bot-api-data:/var/lib/telegram-bot-api
-#
-#  nginx:
-#    image: nginx:1.19-alpine
-#    restart: always
-#    depends_on:
-#      - api
-#    volumes:
-#      - telegram-bot-api-data:/var/lib/telegram-bot-api
-#      - ./nginx:/etc/nginx/conf.d/
+  api:
+    image: aiogram/telegram-bot-api:latest
+    restart: always
+    environment:
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+    env_file:
+      - .env
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+
+  nginx:
+    image: nginx:1.25-alpine
+    restart: always
+    depends_on:
+      - api
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+      - ./nginx:/etc/nginx/conf.d/
 
   bot:
     build:
@@ -30,8 +30,9 @@ services:
       - BOT_TOKEN = ${BOT_TOKEN}
     env_file:
       - .env
-#    depends_on:
-#      - api
+    depends_on:
+      - api
+      - nginx
 
 volumes:
   telegram-bot-api-data:
