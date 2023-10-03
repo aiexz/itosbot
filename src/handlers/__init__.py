@@ -13,4 +13,5 @@ def setup_routers():
     router.include_router(start_router)
     router.include_router(emoji_converter_router)
     router.include_router(images_router)
+    router.include_router(videos_router)
     return router

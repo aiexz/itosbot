@@ -7,4 +7,6 @@ router = Router()
 
 @router.message(CommandStart())
 async def start(message: Message):
-    await message.answer("Hey, I will be working soon!")
+    await message.answer(
+        "Hey, send me photo, video or GIF and I'll convert it to a sticker pack"
+    )

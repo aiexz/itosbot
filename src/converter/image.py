@@ -30,7 +30,7 @@ def adjust_size(image: Image) -> Image:
             image = image.resize(
                 (image.width, min(int(max_height) * 100, image.height))
             )
-        if aspect_ratio == 1:
+        elif aspect_ratio == 1:
             max_size = 50 / math.ceil(image.width / 100)
             image = image.resize(
                 (
