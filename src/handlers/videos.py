@@ -1,3 +1,4 @@
+import logging
 import os
 
 import aiogram.types.input_file
@@ -58,5 +59,6 @@ async def start(message: Message):
 
     if res:
         await message.answer(f"Sticker pack created: https://t.me/addstickers/{name}")
+        logging.info(f"Sticker pack created: https://t.me/addstickers/{name}")
     else:
         await message.answer("Something went wrong. Please contact owner for help.")
