@@ -43,7 +43,7 @@ async def start(message: Message):
                 emoji_list=["😀"],
             )
         )
-    name = f"emojis_{message.from_user.id}_{utils.random_string()}_by_{(await message.bot.me()).username}"
+    name = f"video_{message.from_user.id}_{utils.random_string()}_by_{(await message.bot.me()).username}"
     try:
         res = await message.bot.create_new_sticker_set(
             user_id=message.from_user.id,
@@ -51,7 +51,7 @@ async def start(message: Message):
             title="Created by @" + (await message.bot.me()).username,
             stickers=stickers,
             sticker_format="video",
-            needs_repainting=True,
+            needs_repainting=False,
             sticker_type="custom_emoji",
         )
     except Exception as e:
