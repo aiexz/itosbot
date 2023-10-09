@@ -25,12 +25,12 @@ RUN poetry export --without-hashes > requirements.txt && \
 
 
 FROM base as final
+RUN apt-get update && apt-get install -y ffmpeg
 
 COPY --from=builder /app/.venv ./.venv
 COPY --from=builder /app/dist /app/dist
 
 RUN ./.venv/bin/pip install /app/dist/*.whl
-RUN apt-get update && apt-get install -y ffmpeg
 
 COPY src ./src
 
