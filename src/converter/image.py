@@ -1,6 +1,7 @@
 import logging
 import math
 
+from PIL import Image as PILImage
 from PIL.Image import Image
 
 
@@ -51,6 +52,11 @@ def convert_to_images(image: Image) -> list[Image]:
     :return:
     """
     image = adjust_size(image)
+    transparent = PILImage.new("RGBA", (math.ceil(image.width / 100) * 100, math.ceil(image.height / 100) * 100),
+                               (0,0,0,0))
+    transparent.paste(image, (0, 0))
+    image = transparent
+
     # now split image to tiles
     tiles = []
     for i in range(math.ceil(image.height / 100)):
