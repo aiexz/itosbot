@@ -9,6 +9,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
 
 from src.handlers import setup_routers
+from src.middlewares import AntiFloodMiddleware
 from src.settings import Settings
 
 settings = Settings()
@@ -35,6 +36,7 @@ async def main():
 
     router = setup_routers()
     dp.include_router(router)
+    dp.message.middleware(AntiFloodMiddleware())
 
     await dp.start_polling(
         bot, allowed_updates=dp.resolve_used_update_types(), skip_updates=True

@@ -12,8 +12,8 @@ import src.utils as utils
 router = Router()
 
 
-@router.message(F.photo)
-async def start(message: Message):
+@router.message(F.photo, flags={"new_stickers": True})
+async def image_converter(message: Message):
     await message.bot.send_chat_action(message.chat.id, "upload_photo")
     photo = await message.bot.download(message.photo[-1])
     stickers = []

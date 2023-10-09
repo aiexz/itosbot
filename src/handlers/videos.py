@@ -1,5 +1,4 @@
 import logging
-import os
 
 import aiogram.types.input_file
 from aiogram import Router, F
@@ -10,8 +9,8 @@ from src import utils
 router = Router()
 
 
-@router.message(F.animation | F.video)
-async def start(message: Message):
+@router.message(F.animation | F.video, flags={"new_stickers": True})
+async def video_converter(message: Message):
     await message.bot.send_chat_action(message.chat.id, "upload_video")
     if message.animation:
         if message.animation.duration > 3:
