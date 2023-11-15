@@ -13,9 +13,15 @@ router = Router()
 
 
 @router.message(F.photo, flags={"new_stickers": True})
+@router.message(F.document.mime_type("image/png"), flags={"new_stickers": True})
 async def image_converter(message: Message):
     await message.bot.send_chat_action(message.chat.id, "upload_photo")
-    photo = await message.bot.download(message.photo[-1])
+    if message.photo:
+        photo = await message.bot.download(message.photo[-1])
+    elif message.document:
+        photo = await message.bot.download(message.document.file_id)
+    else:
+        raise ValueError("No photo or document provided")
     stickers = []
     for tile in converter.convert_to_images(PIL.Image.open(photo)):
         sticker = io.BytesIO()
