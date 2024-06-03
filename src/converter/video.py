@@ -12,7 +12,6 @@ from src.converter.exceptions import ConversionError
 
 
 def convert_video(video: BinaryIO):
-
     tempdir = tempfile.mkdtemp()
     filename = "video.mp4"
     with open(f"{tempdir}/{filename}", "wb") as f:
@@ -50,6 +49,7 @@ def convert_video(video: BinaryIO):
                     "-y",
                     "-i",
                     f"{tempdir}/{filename}",
+                    "-an",
                     "-vf",
                     "scale=800:-1",
                     f"{tempdir}/{new_filename}",
@@ -89,6 +89,7 @@ def convert_video(video: BinaryIO):
                     "-y",
                     "-i",
                     f"{tempdir}/{filename}",
+                    "-an",
                     "-vf",
                     "scale=-1:5000",
                     f"{tempdir}/{new_filename}",
@@ -130,6 +131,7 @@ def convert_video(video: BinaryIO):
                     "-y",
                     "-i",
                     f"{tempdir}/{filename}",
+                    "-an",
                     "-vf",
                     f"scale={video_dimensions[0]}:{min(int(max_height) * 100, video_dimensions[1])}",
                     f"{tempdir}/{new_filename}",
@@ -146,6 +148,7 @@ def convert_video(video: BinaryIO):
                     "-y",
                     "-i",
                     f"{tempdir}/{filename}",
+                    "-an",
                     "-vf",
                     f"scale={min(int(max_size) * 100, video_dimensions[0])}:{min(int(max_size) * 100, video_dimensions[1])}",
                     f"{tempdir}/{new_filename}",
@@ -162,6 +165,7 @@ def convert_video(video: BinaryIO):
                     "-y",
                     "-i",
                     f"{tempdir}/{filename}",
+                    "-an",
                     "-vf",
                     f"scale={min(int(max_width) * 100, video_dimensions[0])}:{video_dimensions[1]}",
                     f"{tempdir}/{new_filename}",
@@ -170,21 +174,50 @@ def convert_video(video: BinaryIO):
             )
             filename = new_filename
 
-    new_filename = "video_4.webm"
-    # resize video to its best dimensions
-    subprocess.check_output(
-        [
-            "ffmpeg",
-            "-y",
-            "-i",
-            f"{tempdir}/{filename}",
-            "-vf",
-            f"scale={math.ceil(video_dimensions[0] / 100) * 100}:{math.ceil(video_dimensions[1] / 100) * 100}",
-            f"{tempdir}/{new_filename}",
-        ],
-        stderr=subprocess.DEVNULL,
+    if (
+        math.ceil(video_dimensions[0] / 100) * math.ceil(video_dimensions[1] / 100)
+        <= 50
+    ):
+        new_filename = "video_4.webm"
+        # resize video to its best dimensions
+        subprocess.check_output(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                f"{tempdir}/{filename}",
+                "-an"
+                "-vf",
+                f"scale={math.ceil(video_dimensions[0] / 100) * 100}:{math.ceil(video_dimensions[1] / 100) * 100}",
+                f"{tempdir}/{new_filename}",
+            ],
+            stderr=subprocess.DEVNULL,
+        )
+        filename = new_filename
+
+    video_dimensions = tuple(
+        map(
+            int,
+            (
+                subprocess.check_output(
+                    [
+                        "ffprobe",
+                        "-v",
+                        "error",
+                        "-show_entries",
+                        "stream=width,height",
+                        "-of",
+                        "csv=p=0:s=x",
+                        "-i",
+                        f"{tempdir}/{filename}",
+                    ],
+                    stderr=subprocess.DEVNULL,
+                )
+                .decode("utf-8")
+                .split("x")
+            ),
+        )
     )
-    filename = new_filename
 
     usefull_tiles = []
     for i in range(math.ceil(video_dimensions[1] / 100)):
@@ -192,7 +225,7 @@ def convert_video(video: BinaryIO):
             stderr = subprocess.PIPE
             try:
                 subprocess.check_output(
-                [
+                    [
                         "ffmpeg",
                         "-y",
                         "-i",
@@ -208,7 +241,7 @@ def convert_video(video: BinaryIO):
                         "yuva420p",
                         "-metadata",
                         "title=@itosbot",
-                        ],
+                    ],
                     stderr=stderr,
                 )
             except subprocess.CalledProcessError as e:

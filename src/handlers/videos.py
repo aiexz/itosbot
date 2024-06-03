@@ -3,6 +3,7 @@ import logging
 import aiogram.types.input_file
 from aiogram import Router, F
 from aiogram.types import Message
+
 import src.converter.video as converter
 from src import utils
 
@@ -40,6 +41,7 @@ async def video_converter(message: Message):
                     path=tile, filename="sticker.webm"
                 ),
                 emoji_list=["😀"],
+                format="video",
             )
         )
     name = f"video_{message.from_user.id}_{utils.random_string()}_by_{(await message.bot.me()).username}"
@@ -60,4 +62,4 @@ async def video_converter(message: Message):
         await message.answer(f"Sticker pack created: https://t.me/addstickers/{name}")
         logging.info(f"Sticker pack created: https://t.me/addstickers/{name}")
     else:
-        await message.answer("Something went wrong. Please contact owner for help.")
+        await message.answer("Something went wrong. Please contact @aiexzbot for help.")
