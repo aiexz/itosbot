@@ -32,6 +32,7 @@ async def image_converter(message: Message):
                     file=sticker.getvalue(), filename="sticker.png"
                 ),
                 emoji_list=["😀"],
+                format="static",
             )
         )
     name = f"emojis_{message.from_user.id}_{utils.random_string()}_by_{(await message.bot.me()).username}"
