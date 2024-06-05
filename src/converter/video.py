@@ -186,7 +186,7 @@ def convert_video(video: BinaryIO):
                 "-y",
                 "-i",
                 f"{tempdir}/{filename}",
-                "-an"
+                "-an",
                 "-vf",
                 f"scale={math.ceil(video_dimensions[0] / 100) * 100}:{math.ceil(video_dimensions[1] / 100) * 100}",
                 f"{tempdir}/{new_filename}",
