@@ -28,7 +28,7 @@ class AntiFloodMiddleware(BaseMiddleware):
                 return await handler(event, data)
             except TelegramRetryAfter as e:
                 self.flood_cache[event.from_user.id] = datetime.now() + timedelta(seconds=e.retry_after)
-                await event.answer(f"Too many requests from you. Try again in {e.retry_after} seconds. I will ignore you until then.")
+                #await event.answer(f"Too many requests from you. Try again in {e.retry_after} seconds. I will ignore you until then.")
                 logging.info(f"Too many requests from {event.from_user.id}. Try again in {e.retry_after} seconds.")
                 return
         else:
