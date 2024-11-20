@@ -42,6 +42,12 @@ def convert_video(video: BinaryIO):
     if video_dimensions[0] > 100 or video_dimensions[1] > 100:
         # simillar code as in converter/image.py
         if video_dimensions[0] > 800:
+            # x264 only accepts even numbers, so we need to check that another dimension will be even
+            if video_dimensions[1] / (video_dimensions[0] / 800) % 1 >= 0.5:
+                resized = int(video_dimensions[1] / video_dimensions[0] / 800)
+            else:
+                resized = "-1"
+
             new_filename = "video_1.mp4"
             subprocess.check_output(
                 [
@@ -51,7 +57,7 @@ def convert_video(video: BinaryIO):
                     f"{tempdir}/{filename}",
                     "-an",
                     "-vf",
-                    "scale=800:-1",
+                    f"scale=800:{resized}",
                     f"{tempdir}/{new_filename}",
                 ],
                 stderr=subprocess.DEVNULL,
@@ -82,6 +88,11 @@ def convert_video(video: BinaryIO):
             )  # call to get new dimensions is less than 0.1s, so it's ok
 
         if video_dimensions[1] > 5000:
+            # x264 only accepts even numbers, so we need to check that another dimension will be even
+            if video_dimensions[0] / (video_dimensions[1] / 5000) % 1 >= 0.5:
+                resized = int(video_dimensions[0] / video_dimensions[1] / 5000)
+            else:
+                resized = "-1"
             new_filename = "video_2.mp4"
             subprocess.check_output(
                 [
@@ -91,7 +102,7 @@ def convert_video(video: BinaryIO):
                     f"{tempdir}/{filename}",
                     "-an",
                     "-vf",
-                    "scale=-1:5000",
+                    f"scale={resized}:5000",
                     f"{tempdir}/{new_filename}",
                 ],
                 stderr=subprocess.DEVNULL,

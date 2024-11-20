@@ -33,6 +33,10 @@ async def video_converter(message: Message):
     except converter.ConversionError as e:
         await message.answer("Sorry, but I can't convert this video.\n" + str(e))
         return
+    except Exception as e:
+        await message.answer("Some unexpected error occurred, sorry")
+        logging.exception(e)
+        return
     stickers = []
     for tile in result:
         stickers.append(
