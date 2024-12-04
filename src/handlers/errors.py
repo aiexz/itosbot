@@ -7,7 +7,7 @@ router = Router()
 @router.error()
 async def start(event: ErrorEvent, bot: Bot):
     await event.update.message.answer(
-        "Congrats, you broke the bot. Now go ahead and submit an issue.\n"
-        "https://github.com/aiexz/itosbot/issues/new"
+        "The bot can't process it. Please tell me what you were trying to do.\n"
+        "Message here -> @aiexz"
     )
     raise event.exception
