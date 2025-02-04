@@ -45,7 +45,7 @@ async def image_converter(message: Message):
         sticker_type="custom_emoji",
     )
     if res:
-        await message.answer(f"Sticker pack created: https://t.me/addstickers/{name}")
-        logging.info(f"Sticker pack created: https://t.me/addstickers/{name}")
+        await message.answer(f"Sticker pack created: https://t.me/addemoji/{name}")
+        logging.info(f"Sticker pack created: https://t.me/addemoji/{name}")
     else:
         await message.answer("Something went wrong. Please contact owner for help.")

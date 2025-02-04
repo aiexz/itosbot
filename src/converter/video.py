@@ -3,8 +3,8 @@ import math
 import os
 import subprocess
 import tempfile
-from typing import BinaryIO
 import asyncio
+from typing import BinaryIO, Tuple, List
 
 import PIL
 from PIL.Image import Image
@@ -12,7 +12,8 @@ from PIL.Image import Image
 from src.converter.exceptions import ConversionError
 
 
-async def async_check_output(cmd, stderr=None):
+async def async_check_output(cmd, stderr=None) -> bytes:
+    """Run a subprocess command asynchronously and return its stdout output as bytes."""
     if stderr == subprocess.DEVNULL:
         stderr = asyncio.subprocess.DEVNULL
     proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=stderr)
@@ -22,255 +23,118 @@ async def async_check_output(cmd, stderr=None):
     return out
 
 
-async def convert_video(video: BinaryIO):
+async def probe_video_dimensions(tempdir: str, filename: str) -> Tuple[int, int]:
+    """Probes a video file and returns its dimensions (width, height)."""
+    output = await async_check_output([
+        "ffprobe",
+        "-v", "error",
+        "-show_entries", "stream=width,height",
+        "-of", "csv=p=0:s=x",
+        "-i", f"{tempdir}/{filename}"
+    ], stderr=subprocess.DEVNULL)
+    dims = output.decode("utf-8").strip().split("x")
+    return int(dims[0]), int(dims[1])
+
+
+async def scale_video(tempdir: str, input_filename: str, output_filename: str, scale_filter: str) -> None:
+    """Scales a video using ffmpeg with the specified scale filter."""
+    await async_check_output([
+        "ffmpeg",
+        "-y",
+        "-i", f"{tempdir}/{input_filename}",
+        "-an",
+        "-vf", scale_filter,
+        f"{tempdir}/{output_filename}"
+    ], stderr=subprocess.DEVNULL)
+
+
+async def crop_tiles(tempdir: str, filename: str, width: int, height: int) -> List[str]:
+    """Crops the video into 100x100 tiles and returns a list of tile filenames."""
+    tiles = []
+    num_rows = math.ceil(height / 100)
+    num_cols = math.ceil(width / 100)
+    for i in range(num_rows):
+        for j in range(num_cols):
+            tile_filename = f"{tempdir}/tile{i}_{j}.webm"
+            try:
+                await async_check_output([
+                    "ffmpeg",
+                    "-y",
+                    "-i", f"{tempdir}/{filename}",
+                    "-vf", f"crop=100:100:{j*100}:{i*100}",
+                    tile_filename,
+                    "-crf", "40",
+                    "-c:v", "libvpx-vp9",
+                    "-pix_fmt", "yuva420p",
+                    "-metadata", "title=@itosbot",
+                ], stderr=subprocess.PIPE)
+            except subprocess.CalledProcessError as e:
+                raise ConversionError("Something went wrong during tile cropping") from e
+            tiles.append(tile_filename)
+    # Verify file size for each tile
+    for tile in tiles:
+        if os.path.getsize(tile) > 64 * 1024:
+            raise ConversionError("Tile file is too big")
+    return tiles
+
+
+async def convert_video(video: BinaryIO) -> List[str]:
+    """Converts an input video into a set of cropped tile video files."""
     tempdir = tempfile.mkdtemp()
     filename = "video.mp4"
     with open(f"{tempdir}/{filename}", "wb") as f:
         f.write(video.read())
-    video_dimensions = tuple(
-        map(
-            int,
-            (
-                (await async_check_output(
-                    [
-                        "ffprobe",
-                        "-v",
-                        "error",
-                        "-show_entries",
-                        "stream=width,height",
-                        "-of",
-                        "csv=p=0:s=x",
-                        "-i",
-                        f"{tempdir}/{filename}",
-                    ],
-                    stderr=subprocess.DEVNULL,
-                ))
-                .decode("utf-8")
-                .split("x")
-            ),
-        )
-    )
-    if video_dimensions[0] > 100 or video_dimensions[1] > 100:
-        # simillar code as in converter/image.py
-        if video_dimensions[0] > 800:
-            # x264 only accepts even numbers, so adjust height to nearest even number after scaling
-            scaled = video_dimensions[1] / (video_dimensions[0] / 800)
-            resized = int(scaled) - (int(scaled) % 2)  # round down to nearest even number
 
+    width, height = await probe_video_dimensions(tempdir, filename)
+
+    if width > 100 or height > 100:
+        # Scale if width exceeds 800
+        if width > 800:
+            scaled = height / (width / 800)
+            resized = int(scaled) - (int(scaled) % 2)  # Round down to nearest even number
             new_filename = "video_1.mp4"
-            await async_check_output(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    f"{tempdir}/{filename}",
-                    "-an",
-                    "-vf",
-                    f"scale=800:{resized}",
-                    f"{tempdir}/{new_filename}",
-                ],
-                stderr=subprocess.DEVNULL,
-            )
+            await scale_video(tempdir, filename, new_filename, f"scale=800:{resized}")
             filename = new_filename
-            video_dimensions = tuple(
-                map(
-                    int,
-                    (
-                        (await async_check_output(
-                            [
-                                "ffprobe",
-                                "-v",
-                                "error",
-                                "-show_entries",
-                                "stream=width,height",
-                                "-of",
-                                "csv=p=0:s=x",
-                                "-i",
-                                f"{tempdir}/{filename}",
-                            ],
-                            stderr=subprocess.DEVNULL,
-                        ))
-                        .decode("utf-8")
-                        .split("x")
-                    ),
-                )
-            )
+            width, height = await probe_video_dimensions(tempdir, filename)
 
-        if video_dimensions[1] > 5000:
-            # x264 only accepts even numbers, so adjust height to nearest even number after scaling
-            scaled = video_dimensions[0] / (video_dimensions[1] / 5000)
-            resized = int(scaled) - (int(scaled) % 2)  # round down to nearest even number
+        # Scale if height exceeds 5000
+        if height > 5000:
+            scaled = width / (height / 5000)
+            resized = int(scaled) - (int(scaled) % 2)
             new_filename = "video_2.mp4"
-            await async_check_output(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    f"{tempdir}/{filename}",
-                    "-an",
-                    "-vf",
-                    f"scale={resized}:5000",
-                    f"{tempdir}/{new_filename}",
-                ],
-                stderr=subprocess.DEVNULL,
-            )
+            await scale_video(tempdir, filename, new_filename, f"scale={resized}:5000")
             filename = new_filename
-            video_dimensions = tuple(
-                map(
-                    int,
-                    (
-                        (await async_check_output(
-                            [
-                                "ffprobe",
-                                "-v",
-                                "error",
-                                "-show_entries",
-                                "stream=width,height",
-                                "-of",
-                                "csv=p=0:s=x",
-                                "-i",
-                                f"{tempdir}/video.mp4",
-                            ],
-                            stderr=subprocess.DEVNULL,
-                        ))
-                        .decode("utf-8")
-                        .split("x")
-                    ),
-                )
-            )
+            width, height = await probe_video_dimensions(tempdir, filename)
 
-        aspect_ratio = video_dimensions[0] / video_dimensions[1]
+        # Adjust video based on aspect ratio
+        aspect_ratio = width / height
         if aspect_ratio > 1:
             new_filename = "video_3.mp4"
-            max_height = 50 / math.ceil(video_dimensions[0] / 100)
-            await async_check_output(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    f"{tempdir}/{filename}",
-                    "-an",
-                    "-vf",
-                    f"scale={video_dimensions[0]}:{min(int(max_height) * 100, video_dimensions[1])}",
-                    f"{tempdir}/{new_filename}",
-                ],
-                stderr=subprocess.DEVNULL,
-            )
+            max_height = 50 / math.ceil(width / 100)
+            target_height = min(int(max_height) * 100, height)
+            await scale_video(tempdir, filename, new_filename, f"scale={width}:{target_height}")
             filename = new_filename
         elif aspect_ratio == 1:
             new_filename = "video_3.mp4"
-            max_size = 50 / math.ceil(video_dimensions[0] / 100)
-            await async_check_output(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    f"{tempdir}/{filename}",
-                    "-an",
-                    "-vf",
-                    f"scale={min(int(max_size) * 100, video_dimensions[0])}:{min(int(max_size) * 100, video_dimensions[1])}",
-                    f"{tempdir}/{new_filename}",
-                ],
-                stderr=subprocess.DEVNULL,
-            )
+            max_size = 50 / math.ceil(width / 100)
+            target_size = min(int(max_size) * 100, width)
+            await scale_video(tempdir, filename, new_filename, f"scale={target_size}:{target_size}")
             filename = new_filename
         else:
             new_filename = "video_3.mp4"
-            max_width = 50 / math.ceil(video_dimensions[1] / 100)
-            await async_check_output(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    f"{tempdir}/{filename}",
-                    "-an",
-                    "-vf",
-                    f"scale={min(int(max_width) * 100, video_dimensions[0])}:{video_dimensions[1]}",
-                    f"{tempdir}/{new_filename}",
-                ],
-                stderr=subprocess.DEVNULL,
-            )
+            max_width = 50 / math.ceil(height / 100)
+            target_width = min(int(max_width) * 100, width)
+            await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{height}")
             filename = new_filename
 
-    if (
-        math.ceil(video_dimensions[0] / 100) * math.ceil(video_dimensions[1] / 100)
-        <= 50
-    ):
-        new_filename = "video_4.webm"
-        # resize video to its best dimensions
-        await async_check_output(
-            [
-                "ffmpeg",
-                "-y",
-                "-i",
-                f"{tempdir}/{filename}",
-                "-an",
-                "-vf",
-                f"scale={math.ceil(video_dimensions[0] / 100) * 100}:{math.ceil(video_dimensions[1] / 100) * 100}",
-                f"{tempdir}/{new_filename}",
-            ],
-            stderr=subprocess.DEVNULL,
-        )
-        filename = new_filename
+        # Further scaling if the total number of tiles is small
+        if math.ceil(width / 100) * math.ceil(height / 100) <= 50:
+            new_filename = "video_4.webm"
+            target_width = math.ceil(width / 100) * 100
+            target_height = math.ceil(height / 100) * 100
+            await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{target_height}")
+            filename = new_filename
+            width, height = await probe_video_dimensions(tempdir, filename)
 
-    video_dimensions = tuple(
-        map(
-            int,
-            (
-                (await async_check_output(
-                    [
-                        "ffprobe",
-                        "-v",
-                        "error",
-                        "-show_entries",
-                        "stream=width,height",
-                        "-of",
-                        "csv=p=0:s=x",
-                        "-i",
-                        f"{tempdir}/{filename}",
-                    ],
-                    stderr=subprocess.DEVNULL,
-                ))
-                .decode("utf-8")
-                .split("x")
-            ),
-        )
-    )
-
-    usefull_tiles = []
-    for i in range(math.ceil(video_dimensions[1] / 100)):
-        for j in range(math.ceil(video_dimensions[0] / 100)):
-            stderr = subprocess.PIPE
-            try:
-                await async_check_output(
-                    [
-                        "ffmpeg",
-                        "-y",
-                        "-i",
-                        f"{tempdir}/{filename}",
-                        "-vf",
-                        f"crop=100:100:{j * 100}:{i * 100}",
-                        f"{tempdir}/tile{i}_{j}.webm",
-                        "-crf",
-                        "40",
-                        "-c:v",
-                        "libvpx-vp9",
-                        "-pix_fmt",
-                        "yuva420p",
-                        "-metadata",
-                        "title=@itosbot",
-                    ],
-                    stderr=stderr,
-                )
-            except subprocess.CalledProcessError as e:
-                print(e.stderr.decode("utf-8"))
-                raise ConversionError("Something went wrong")
-            usefull_tiles.append(f"{tempdir}/tile{i}_{j}.webm")
-
-    # check file size
-    # if it's more than 64kb, reduce quality
-    for file in os.listdir(tempdir):
-        if file.startswith("tile") and os.path.getsize(f"{tempdir}/{file}") > 64 * 1024:
-            # no need to try uploading it, it will fail
-            raise ConversionError("File is too big")
-    return usefull_tiles
+    tiles = await crop_tiles(tempdir, filename, width, height)
+    return tiles
