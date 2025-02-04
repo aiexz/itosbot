@@ -1,0 +1,43 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    develop:
+      watch:
+        - path: src
+          action: sync+restart
+          target: /app/src
+          ignore:
+            - .env
+    restart: on-failure
+    environment:
+      - BOT_TOKEN = ${BOT_TOKEN}
+    env_file:
+      - .env
+    depends_on:
+      - api
+      - nginx
+
+  nginx:
+    image: nginx:1.25-alpine
+    restart: always
+    depends_on:
+      - api
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+      - ./nginx:/etc/nginx/conf.d/
+  
+  api:
+    image: aiogram/telegram-bot-api:latest
+    restart: always
+    environment:
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+    env_file:
+      - .env
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+
+volumes:
+  telegram-bot-api-data:

@@ -1,3 +1,5 @@
 debug
 .env
 .idea
+*.pyc
+.DS_Store

@@ -29,7 +29,7 @@ async def video_converter(message: Message):
         video = await message.bot.download(message.video.file_id)
 
     try:
-        result = converter.convert_video(video)
+        result = await converter.convert_video(video)
     except converter.ConversionError as e:
         await message.answer("Sorry, but I can't convert this video.\n" + str(e))
         return
@@ -63,7 +63,7 @@ async def video_converter(message: Message):
         raise e
 
     if res:
-        await message.answer(f"Sticker pack created: https://t.me/addstickers/{name}")
-        logging.info(f"Sticker pack created: https://t.me/addstickers/{name}")
+        await message.answer(f"Sticker pack created: https://t.me/addemoji/{name}")
+        logging.info(f"Sticker pack created: https://t.me/addemoji/{name}")
     else:
         await message.answer("Something went wrong. Please contact @aiexzbot for help.")

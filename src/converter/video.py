@@ -4,6 +4,7 @@ import os
 import subprocess
 import tempfile
 from typing import BinaryIO
+import asyncio
 
 import PIL
 from PIL.Image import Image
@@ -11,7 +12,17 @@ from PIL.Image import Image
 from src.converter.exceptions import ConversionError
 
 
-def convert_video(video: BinaryIO):
+async def async_check_output(cmd, stderr=None):
+    if stderr == subprocess.DEVNULL:
+        stderr = asyncio.subprocess.DEVNULL
+    proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=stderr)
+    out, err = await proc.communicate()
+    if proc.returncode:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, output=out, stderr=err)
+    return out
+
+
+async def convert_video(video: BinaryIO):
     tempdir = tempfile.mkdtemp()
     filename = "video.mp4"
     with open(f"{tempdir}/{filename}", "wb") as f:
@@ -20,7 +31,7 @@ def convert_video(video: BinaryIO):
         map(
             int,
             (
-                subprocess.check_output(
+                (await async_check_output(
                     [
                         "ffprobe",
                         "-v",
@@ -33,7 +44,7 @@ def convert_video(video: BinaryIO):
                         f"{tempdir}/{filename}",
                     ],
                     stderr=subprocess.DEVNULL,
-                )
+                ))
                 .decode("utf-8")
                 .split("x")
             ),
@@ -42,14 +53,12 @@ def convert_video(video: BinaryIO):
     if video_dimensions[0] > 100 or video_dimensions[1] > 100:
         # simillar code as in converter/image.py
         if video_dimensions[0] > 800:
-            # x264 only accepts even numbers, so we need to check that another dimension will be even
-            if video_dimensions[1] / (video_dimensions[0] / 800) % 1 >= 0.5:
-                resized = int(video_dimensions[1] / video_dimensions[0] / 800)
-            else:
-                resized = "-1"
+            # x264 only accepts even numbers, so adjust height to nearest even number after scaling
+            scaled = video_dimensions[1] / (video_dimensions[0] / 800)
+            resized = int(scaled) - (int(scaled) % 2)  # round down to nearest even number
 
             new_filename = "video_1.mp4"
-            subprocess.check_output(
+            await async_check_output(
                 [
                     "ffmpeg",
                     "-y",
@@ -67,7 +76,7 @@ def convert_video(video: BinaryIO):
                 map(
                     int,
                     (
-                        subprocess.check_output(
+                        (await async_check_output(
                             [
                                 "ffprobe",
                                 "-v",
@@ -80,21 +89,19 @@ def convert_video(video: BinaryIO):
                                 f"{tempdir}/{filename}",
                             ],
                             stderr=subprocess.DEVNULL,
-                        )
+                        ))
                         .decode("utf-8")
                         .split("x")
                     ),
                 )
-            )  # call to get new dimensions is less than 0.1s, so it's ok
+            )
 
         if video_dimensions[1] > 5000:
-            # x264 only accepts even numbers, so we need to check that another dimension will be even
-            if video_dimensions[0] / (video_dimensions[1] / 5000) % 1 >= 0.5:
-                resized = int(video_dimensions[0] / video_dimensions[1] / 5000)
-            else:
-                resized = "-1"
+            # x264 only accepts even numbers, so adjust height to nearest even number after scaling
+            scaled = video_dimensions[0] / (video_dimensions[1] / 5000)
+            resized = int(scaled) - (int(scaled) % 2)  # round down to nearest even number
             new_filename = "video_2.mp4"
-            subprocess.check_output(
+            await async_check_output(
                 [
                     "ffmpeg",
                     "-y",
@@ -112,7 +119,7 @@ def convert_video(video: BinaryIO):
                 map(
                     int,
                     (
-                        subprocess.check_output(
+                        (await async_check_output(
                             [
                                 "ffprobe",
                                 "-v",
@@ -125,7 +132,7 @@ def convert_video(video: BinaryIO):
                                 f"{tempdir}/video.mp4",
                             ],
                             stderr=subprocess.DEVNULL,
-                        )
+                        ))
                         .decode("utf-8")
                         .split("x")
                     ),
@@ -136,7 +143,7 @@ def convert_video(video: BinaryIO):
         if aspect_ratio > 1:
             new_filename = "video_3.mp4"
             max_height = 50 / math.ceil(video_dimensions[0] / 100)
-            subprocess.check_output(
+            await async_check_output(
                 [
                     "ffmpeg",
                     "-y",
@@ -153,7 +160,7 @@ def convert_video(video: BinaryIO):
         elif aspect_ratio == 1:
             new_filename = "video_3.mp4"
             max_size = 50 / math.ceil(video_dimensions[0] / 100)
-            subprocess.check_output(
+            await async_check_output(
                 [
                     "ffmpeg",
                     "-y",
@@ -170,7 +177,7 @@ def convert_video(video: BinaryIO):
         else:
             new_filename = "video_3.mp4"
             max_width = 50 / math.ceil(video_dimensions[1] / 100)
-            subprocess.check_output(
+            await async_check_output(
                 [
                     "ffmpeg",
                     "-y",
@@ -191,7 +198,7 @@ def convert_video(video: BinaryIO):
     ):
         new_filename = "video_4.webm"
         # resize video to its best dimensions
-        subprocess.check_output(
+        await async_check_output(
             [
                 "ffmpeg",
                 "-y",
@@ -210,7 +217,7 @@ def convert_video(video: BinaryIO):
         map(
             int,
             (
-                subprocess.check_output(
+                (await async_check_output(
                     [
                         "ffprobe",
                         "-v",
@@ -223,7 +230,7 @@ def convert_video(video: BinaryIO):
                         f"{tempdir}/{filename}",
                     ],
                     stderr=subprocess.DEVNULL,
-                )
+                ))
                 .decode("utf-8")
                 .split("x")
             ),
@@ -235,7 +242,7 @@ def convert_video(video: BinaryIO):
         for j in range(math.ceil(video_dimensions[0] / 100)):
             stderr = subprocess.PIPE
             try:
-                subprocess.check_output(
+                await async_check_output(
                     [
                         "ffmpeg",
                         "-y",
