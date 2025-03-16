@@ -36,6 +36,19 @@ async def probe_video_dimensions(tempdir: str, filename: str) -> Tuple[int, int]
     return int(dims[0]), int(dims[1])
 
 
+async def ensure_even_dimensions(width: float, height: float) -> Tuple[int, int]:
+    """Ensures both width and height are even numbers."""
+    width = int(width)
+    height = int(height)
+    # Make sure both dimensions are even
+    width = width - (width % 2)
+    height = height - (height % 2)
+    # Ensure dimensions are at least 2 pixels
+    width = max(2, width)
+    height = max(2, height)
+    return width, height
+
+
 async def scale_video(tempdir: str, input_filename: str, output_filename: str, scale_filter: str) -> None:
     """Scales a video using ffmpeg with the specified scale filter."""
     await async_check_output([
@@ -91,18 +104,18 @@ async def convert_video(video: BinaryIO) -> List[str]:
         # Scale if width exceeds 800
         if width > 800:
             scaled = height / (width / 800)
-            resized = int(scaled) - (int(scaled) % 2)  # Round down to nearest even number
+            resized, _ = await ensure_even_dimensions(800, scaled)
             new_filename = "video_1.mp4"
-            await scale_video(tempdir, filename, new_filename, f"scale=800:{resized}")
+            await scale_video(tempdir, filename, new_filename, f"scale={resized}:{_}")
             filename = new_filename
             width, height = await probe_video_dimensions(tempdir, filename)
 
         # Scale if height exceeds 5000
         if height > 5000:
             scaled = width / (height / 5000)
-            resized = int(scaled) - (int(scaled) % 2)
+            resized, _ = await ensure_even_dimensions(scaled, 5000)
             new_filename = "video_2.mp4"
-            await scale_video(tempdir, filename, new_filename, f"scale={resized}:5000")
+            await scale_video(tempdir, filename, new_filename, f"scale={resized}:{_}")
             filename = new_filename
             width, height = await probe_video_dimensions(tempdir, filename)
 
@@ -112,29 +125,51 @@ async def convert_video(video: BinaryIO) -> List[str]:
             new_filename = "video_3.mp4"
             max_height = 50 / math.ceil(width / 100)
             target_height = min(int(max_height) * 100, height)
-            await scale_video(tempdir, filename, new_filename, f"scale={-1}:{target_height}")
+            # Calculate width to maintain aspect ratio
+            target_width = int(width * (target_height / height))
+            target_width, target_height = await ensure_even_dimensions(target_width, target_height)
+            await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{target_height}")
             filename = new_filename
         elif aspect_ratio == 1:
             new_filename = "video_3.mp4"
             max_size = 50 / math.ceil(width / 100)
             target_size = min(int(max_size) * 100, width)
-            await scale_video(tempdir, filename, new_filename, f"scale={target_size}:{target_size}")
+            target_width, target_height = await ensure_even_dimensions(target_size, target_size)
+            await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{target_height}")
             filename = new_filename
         else:
             new_filename = "video_3.mp4"
             max_width = 50 / math.ceil(height / 100)
             target_width = min(int(max_width) * 100, width)
-            await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{-1}")
+            # Calculate height to maintain aspect ratio
+            target_height = int(height * (target_width / width))
+            target_width, target_height = await ensure_even_dimensions(target_width, target_height)
+            await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{target_height}")
             filename = new_filename
 
         # Further scaling if the total number of tiles is small
+        width, height = await probe_video_dimensions(tempdir, filename)
         if math.ceil(width / 100) * math.ceil(height / 100) <= 50:
             new_filename = "video_4.webm"
             target_width = math.ceil(width / 100) * 100
             target_height = math.ceil(height / 100) * 100
+            target_width, target_height = await ensure_even_dimensions(target_width, target_height)
             await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{target_height}")
             filename = new_filename
-            
+            width, height = await probe_video_dimensions(tempdir, filename)
+
+    # Final check to ensure we don't exceed 50 cells
+    num_cells = math.ceil(width / 100) * math.ceil(height / 100)
+    if num_cells > 50:
+        # Calculate scaling factor to get under 50 cells
+        scale_factor = math.sqrt(50 / num_cells)
+        new_width = int(width * scale_factor)
+        new_height = int(height * scale_factor)
+        new_width, new_height = await ensure_even_dimensions(new_width, new_height)
+        
+        new_filename = "video_final.webm"
+        await scale_video(tempdir, filename, new_filename, f"scale={new_width}:{new_height}")
+        filename = new_filename
         width, height = await probe_video_dimensions(tempdir, filename)
 
     tiles = await crop_tiles(tempdir, filename, width, height)
