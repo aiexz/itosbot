@@ -37,6 +37,8 @@ async def video_converter(message: Message):
         await message.answer("Some unexpected error occurred, sorry")
         logging.exception(e)
         return
+    if len(result) > 50:
+        logging.error("Too many tiles", len(result))
     stickers = []
     for tile in result:
         stickers.append(

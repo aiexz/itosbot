@@ -112,7 +112,7 @@ async def convert_video(video: BinaryIO) -> List[str]:
             new_filename = "video_3.mp4"
             max_height = 50 / math.ceil(width / 100)
             target_height = min(int(max_height) * 100, height)
-            await scale_video(tempdir, filename, new_filename, f"scale={width}:{target_height}")
+            await scale_video(tempdir, filename, new_filename, f"scale={-1}:{target_height}")
             filename = new_filename
         elif aspect_ratio == 1:
             new_filename = "video_3.mp4"
@@ -124,7 +124,7 @@ async def convert_video(video: BinaryIO) -> List[str]:
             new_filename = "video_3.mp4"
             max_width = 50 / math.ceil(height / 100)
             target_width = min(int(max_width) * 100, width)
-            await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{height}")
+            await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{-1}")
             filename = new_filename
 
         # Further scaling if the total number of tiles is small
@@ -134,7 +134,8 @@ async def convert_video(video: BinaryIO) -> List[str]:
             target_height = math.ceil(height / 100) * 100
             await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{target_height}")
             filename = new_filename
-            width, height = await probe_video_dimensions(tempdir, filename)
+            
+        width, height = await probe_video_dimensions(tempdir, filename)
 
     tiles = await crop_tiles(tempdir, filename, width, height)
     return tiles
