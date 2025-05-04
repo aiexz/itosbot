@@ -60,6 +60,16 @@ async def scale_video(tempdir: str, input_filename: str, output_filename: str, s
         f"{tempdir}/{output_filename}"
     ], stderr=subprocess.DEVNULL)
 
+async def get_video_length(filename: str) -> float:
+    """Gets the length of a video file in seconds."""
+    output = await async_check_output([
+        "ffprobe",
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        filename
+    ], stderr=subprocess.DEVNULL)
+    return float(output.decode("utf-8").strip())
 
 async def crop_tiles(tempdir: str, filename: str, width: int, height: int) -> List[str]:
     """Crops the video into 100x100 tiles and returns a list of tile filenames."""
@@ -75,12 +85,13 @@ async def crop_tiles(tempdir: str, filename: str, width: int, height: int) -> Li
                     "-y",
                     "-i", f"{tempdir}/{filename}",
                     "-vf", f"crop=100:100:{j*100}:{i*100}",
-                    tile_filename,
                     "-crf", "40",
                     "-c:v", "libvpx-vp9",
                     "-pix_fmt", "yuva420p",
                     "-metadata", "title=@itosbot",
+                    tile_filename
                 ], stderr=subprocess.PIPE)
+            #     WHY DOES ARGUMENT ORDER FOR OUTPUT MATTER? IF NOT LAST FFMPEG WILL NOT FORCE PIX_FMT
             except subprocess.CalledProcessError as e:
                 raise ConversionError("Something went wrong during tile cropping") from e
             tiles.append(tile_filename)
