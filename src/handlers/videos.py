@@ -26,6 +26,7 @@ async def video_converter(message: Message):
         video = await message.bot.download(message.document.file_id)
         with tempfile.NamedTemporaryFile() as f:
             f.write(video.read())
+            f.flush()
             video.seek(0)
             length = await converter.get_video_length(f.name)
             if length > 3:
