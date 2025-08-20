@@ -12,7 +12,7 @@ router = Router()
 
 
 @router.message(F.animation | F.video, flags={"new_stickers": True})
-@router.message(F.document.mime_type.in_(["image/gif","video/mp4"]), flags={"new_stickers": True})
+@router.message(F.document.mime_type.in_(["image/gif","video/mp4", "video/webm"]), flags={"new_stickers": True})
 async def video_converter(message: Message):
     await message.bot.send_chat_action(message.chat.id, "upload_video")
     if message.animation:
