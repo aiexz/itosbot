@@ -1,2 +1,2 @@
-class ConversionError(BaseException):
+class ConversionError(Exception):
     pass
