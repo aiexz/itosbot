@@ -1,37 +1,29 @@
-FROM python:3.11-slim as base
+FROM python:3.13-slim AS base
 
 ENV PYTHONFAULTHANDLER=1 \
     PYTHONHASHSEED=random \
     PYTHONUNBUFFERED=1
 
-WORKDIR /app
+WORKDIR /src
 
-FROM base as builder
+FROM base AS builder
 
 ENV PIP_DEFAULT_TIMEOUT=100 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1 \
-    POETRY_VERSION=1.5.1
+    PIP_NO_CACHE_DIR=1
+COPY --from=ghcr.io/astral-sh/uv:0.9.2 /uv /uvx /bin/
 
-RUN pip install "poetry==$POETRY_VERSION"
+COPY pyproject.toml uv.lock ./
 
-COPY pyproject.toml poetry.lock ./
+RUN uv pip install --system -e .
 
-RUN poetry config virtualenvs.in-project true && \
-    poetry lock
+FROM base AS final
 
-RUN poetry export --without-hashes > requirements.txt && \
-    poetry run python -m pip wheel --no-cache-dir --wheel-dir=/app/dist -r requirements.txt
-
-
-FROM base as final
 RUN apt-get update && apt-get install -y ffmpeg
 
-COPY --from=builder /app/.venv ./.venv
-COPY --from=builder /app/dist /app/dist
-
-RUN ./.venv/bin/pip install /app/dist/*.whl
+COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 
 COPY src ./src
 
-ENTRYPOINT ["./.venv/bin/python", "-m", "src"]
+ENTRYPOINT ["python", "-m", "src"]

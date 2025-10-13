@@ -1,16 +1,13 @@
-[tool.poetry]
+[project]
 name = "itosbot"
 version = "0.1.0"
 description = ""
-authors = ["Alex <42418433+aiexz@users.noreply.github.com>"]
+authors = [{ name = "Alex", email = "42418433+aiexz@users.noreply.github.com" }]
+requires-python = "~=3.13"
 readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.11"
-aiogram = "^3.1.1"
-pydantic-settings = "^2.0.2"
-pillow = "^10.0.0"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+dependencies = [
+    "aiogram>=3.22.0",
+    "pillow>=11.3.0",
+    "pydantic-settings>=2.11.0",
+    "numpy>=2.0.0",
+]

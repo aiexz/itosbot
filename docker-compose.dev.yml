@@ -12,7 +12,7 @@ services:
             - .env
     restart: on-failure
     environment:
-      - BOT_TOKEN = ${BOT_TOKEN}
+      - BOT_TOKEN=${BOT_TOKEN:-123456:ABCDEF}
     env_file:
       - .env
     depends_on:
