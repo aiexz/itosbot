@@ -24,7 +24,7 @@ async def image_converter(message: Message):
         photo = await message.bot.download(message.document.file_id)
     else:
         raise ValueError("No photo or document provided")
-    custom_width, bg_color, b_sim, b_blend = 0, None, 30, 0
+    custom_width, custom_height, bg_color, b_sim, b_blend = 0, 0, None, 30, 0
     title = "Created by @" + (await message.bot.me()).username
     # Parse command arguments if present
     if message_text and message_text.startswith("/convert"):
@@ -37,6 +37,12 @@ async def image_converter(message: Message):
             custom_width = custom_width * 100 # convert to pixels
         except ValueError:
             custom_width = 0
+        try:
+            custom_height = int(command_map.get("h", 0))
+            custom_height = max(0, custom_height) # height can't be negative
+            custom_height = custom_height * 100 # convert to pixels
+        except ValueError:
+            custom_height = 0
         bg_color = command_map.get("b", None) # background color
         try:
             b_sim = float(command_map.get("b_sim", "30"))
@@ -55,7 +61,19 @@ async def image_converter(message: Message):
 
 
     stickers = []
-    for tile in converter.convert_to_images(PIL.Image.open(photo), custom_width, bg_color, b_sim, b_blend):
+    try:
+        tiles = converter.convert_to_images(PIL.Image.open(photo), custom_width, custom_height, bg_color, b_sim, b_blend)
+    except converter.TileLimitError as e:
+        await message.answer(f"❌ {str(e)}")
+        return
+    except converter.DimensionError as e:
+        await message.answer(f"❌ {str(e)}")
+        return
+    except ValueError as e:
+        await message.answer(f"❌ Invalid image: {str(e)}")
+        return
+    
+    for tile in tiles:
         sticker = io.BytesIO()
         tile.save(sticker, format="PNG")
         stickers.append(

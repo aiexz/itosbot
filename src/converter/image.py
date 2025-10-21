@@ -4,6 +4,7 @@ import numpy as np
 
 from PIL import Image as PILImage
 from PIL.Image import Image
+from src.converter.exceptions import TileLimitError, DimensionError
 
 
 def remove_background(image: Image, bg_color: str, similarity: float = 20, blend: float = 0) -> Image:
@@ -60,24 +61,49 @@ def remove_background(image: Image, bg_color: str, similarity: float = 20, blend
     return PILImage.fromarray(data, 'RGBA')
 
 
-def adjust_size(image: Image, custom_width: int = 0) -> Image:
+def adjust_size(image: Image, custom_width: int = 0, custom_height: int = 0) -> Image:
     """
     Adjust image size to be in range 100x100 - 800x5000 that is max 50 tiles in total
     :param image:
     :param custom_width: Custom width in pixels (0 = auto)
+    :param custom_height: Custom height in pixels (0 = auto)
     :return:
     """
     # check the image size
     aspect_ratio = image.width / image.height
     if 0.02 > aspect_ratio or aspect_ratio > 50:
         logging.debug("Image size is not ok", aspect_ratio)
-        raise ValueError("Image size is not ok", aspect_ratio)
+        raise DimensionError("Image aspect ratio is not supported (must be between 0.02 and 50)")
     
-    # Apply custom width if specified
-    if custom_width > 0:
-        logging.debug(f"Applying custom width: {custom_width}px")
-        # Calculate height to maintain aspect ratio
-        custom_height = max(int(custom_width / aspect_ratio), 100)
+    # Apply custom dimensions if specified
+    if custom_width > 0 or custom_height > 0:
+        # Determine final dimensions
+        if custom_width > 0 and custom_height > 0:
+            # Both specified - use both
+            logging.debug(f"Applying custom width: {custom_width}px and height: {custom_height}px")
+            final_width = custom_width
+            final_height = custom_height
+            
+            # Check tile limit when both dimensions are specified
+            max_tiles_width = math.ceil(final_width / 100)
+            max_tiles_height = math.ceil(final_height / 100)
+            total_tiles = max_tiles_width * max_tiles_height
+            
+            if total_tiles > 50:
+                raise TileLimitError(f"Custom dimensions would create {total_tiles} tiles (max 50). Reduce width or height.")
+        elif custom_width > 0:
+            # Only width specified - calculate height from aspect ratio
+            logging.debug(f"Applying custom width: {custom_width}px")
+            final_width = custom_width
+            final_height = max(int(custom_width / aspect_ratio), 100)
+        else:
+            # Only height specified - calculate width from aspect ratio
+            logging.debug(f"Applying custom height: {custom_height}px")
+            final_height = custom_height
+            final_width = max(int(custom_height * aspect_ratio), 100)
+        
+        custom_width = final_width
+        custom_height = final_height
         
         # Ensure we don't exceed 50 tiles (100x100 each)
         max_tiles_width = math.ceil(custom_width / 100)
@@ -131,11 +157,12 @@ def adjust_size(image: Image, custom_width: int = 0) -> Image:
     return image
 
 
-def convert_to_images(image: Image, custom_width: int = 0, bg_color: str | None = None, bg_similarity: float = 30, bg_blend: float = 0) -> list[Image]:
+def convert_to_images(image: Image, custom_width: int = 0, custom_height: int = 0, bg_color: str | None = None, bg_similarity: float = 30, bg_blend: float = 0) -> list[Image]:
     """
     Slice image to 100x100 tiles
     :param image:
     :param custom_width: Custom width in pixels (0 = auto)
+    :param custom_height: Custom height in pixels (0 = auto)
     :param bg_color: Background color to remove in hex format (e.g., "#FFFFFF")
     :param bg_similarity: Color similarity threshold (0-100, default 30)
     :param bg_blend: Blend amount for edge smoothing (0-100, default 0)
@@ -145,7 +172,7 @@ def convert_to_images(image: Image, custom_width: int = 0, bg_color: str | None 
     if bg_color:
         image = remove_background(image, bg_color, bg_similarity, bg_blend)
     
-    image = adjust_size(image, custom_width)
+    image = adjust_size(image, custom_width, custom_height)
     transparent = PILImage.new("RGBA", (math.ceil(image.width / 100) * 100, math.ceil(image.height / 100) * 100),
                                (0,0,0,0))
     transparent.paste(image, (0, 0))

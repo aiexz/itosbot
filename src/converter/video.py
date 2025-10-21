@@ -9,7 +9,7 @@ from typing import BinaryIO, Tuple, List
 import PIL
 from PIL.Image import Image
 
-from src.converter.exceptions import ConversionError
+from src.converter.exceptions import ConversionError, TileLimitError
 
 
 async def async_check_output(cmd, stderr=None) -> bytes:
@@ -194,13 +194,13 @@ async def crop_tiles(tempdir: str, filename: str, width: int, height: int, bg_co
     return tiles
 
 
-async def convert_video(video: BinaryIO, custom_width: int = 0, bg_color: str | None = None, bg_similarity: float =
-20, bg_blend: float = 0) -> List[str]:
+async def convert_video(video: BinaryIO, custom_width: int = 0, custom_height: int = 0, bg_color: str | None = None, bg_similarity: float = 20, bg_blend: float = 0) -> List[str]:
     """Converts an input video into a set of cropped tile video files.
     
     Args:
         video: Input video file as BinaryIO
         custom_width: Custom width in pixels (0 = auto)
+        custom_height: Custom height in pixels (0 = auto)
         bg_color: Background color to remove in hex format (e.g., "#FFFFFF")
         bg_similarity: Color similarity threshold (0-100, default 20)
         bg_blend: Blend amount for edge smoothing (0-100, default 0)
@@ -215,10 +215,34 @@ async def convert_video(video: BinaryIO, custom_width: int = 0, bg_color: str | 
 
     width, height = await probe_video_dimensions(tempdir, filename)
     
-    # Apply custom width if specified
-    if custom_width > 0:
+    # Apply custom dimensions if specified
+    if custom_width > 0 or custom_height > 0:
         aspect_ratio = width / height
-        custom_height = max(int(custom_width / aspect_ratio), 100)
+        
+        # Determine final dimensions
+        if custom_width > 0 and custom_height > 0:
+            # Both specified - use both
+            final_width = custom_width
+            final_height = custom_height
+            
+            # Check tile limit when both dimensions are specified
+            max_tiles_width = math.ceil(final_width / 100)
+            max_tiles_height = math.ceil(final_height / 100)
+            total_tiles = max_tiles_width * max_tiles_height
+            
+            if total_tiles > 50:
+                raise TileLimitError(f"Custom dimensions would create {total_tiles} tiles (max 50). Reduce width or height.")
+        elif custom_width > 0:
+            # Only width specified - calculate height from aspect ratio
+            final_width = custom_width
+            final_height = max(int(custom_width / aspect_ratio), 100)
+        else:
+            # Only height specified - calculate width from aspect ratio
+            final_height = custom_height
+            final_width = max(int(custom_height * aspect_ratio), 100)
+        
+        custom_width = final_width
+        custom_height = final_height
         
         # Ensure we don't exceed 50 tiles (100x100 each)
         max_tiles_width = math.ceil(custom_width / 100)
