@@ -25,7 +25,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    restart: on-failure
+    restart: always
     environment:
       - BOT_TOKEN=${BOT_TOKEN:-123456:ABCDEF}
     env_file:
