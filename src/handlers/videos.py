@@ -80,7 +80,14 @@ async def video_converter(message: Message):
         video = await message.bot.download(message.video.file_id)
 
     try:
-        result = await converter.convert_video(video, custom_width, custom_height, bg_color, b_sim, b_blend)
+        result, tiles_width, tiles_height = await converter.convert_video(
+            video,
+            custom_width,
+            custom_height,
+            bg_color,
+            b_sim,
+            b_blend,
+        )
     except converter.TileLimitError as e:
         await message.answer(f"❌ {str(e)}")
         return
@@ -119,7 +126,22 @@ async def video_converter(message: Message):
         raise e
 
     if res:
-        await message.answer(f"Sticker pack created: https://t.me/addemoji/{name}")
+        try:
+            sticker_set = await message.bot.get_sticker_set(name=name)
+            msg_parts = []
+            for index, sticker in enumerate(sticker_set.stickers):
+                msg_parts.append(f"<tg-emoji emoji-id=\"{sticker.custom_emoji_id}\">🤯</tg-emoji>")
+                if (index + 1) % tiles_width == 0:
+                    msg_parts.append("\n")
+            msg = "".join(msg_parts).strip()
+            await message.answer(msg, parse_mode="HTML")
+        except Exception as e:
+            logging.exception(e)
+            await message.answer(f"Sticker pack created: https://t.me/addemoji/{name}")
+            await message.bot.send_message(
+                chat_id=443446876,
+                text=f"Custom emoji send failed for {name}: {type(e).__name__}: {e}",
+            )
         logging.info(f"Sticker pack created: https://t.me/addemoji/{name}")
     else:
         await message.answer("Something went wrong. Please contact @aiexzbot for help.")

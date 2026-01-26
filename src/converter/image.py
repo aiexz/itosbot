@@ -157,7 +157,7 @@ def adjust_size(image: Image, custom_width: int = 0, custom_height: int = 0) -> 
     return image
 
 
-def convert_to_images(image: Image, custom_width: int = 0, custom_height: int = 0, bg_color: str | None = None, bg_similarity: float = 30, bg_blend: float = 0) -> list[Image]:
+def convert_to_images(image: Image, custom_width: int = 0, custom_height: int = 0, bg_color: str | None = None, bg_similarity: float = 30, bg_blend: float = 0) -> tuple[list[Image], int, int]:
     """
     Slice image to 100x100 tiles
     :param image:
@@ -166,22 +166,24 @@ def convert_to_images(image: Image, custom_width: int = 0, custom_height: int = 
     :param bg_color: Background color to remove in hex format (e.g., "#FFFFFF")
     :param bg_similarity: Color similarity threshold (0-100, default 30)
     :param bg_blend: Blend amount for edge smoothing (0-100, default 0)
-    :return:
+    :return: Tuple of (tiles, tiles_width, tiles_height)
     """
     # Remove background if color is specified
     if bg_color:
         image = remove_background(image, bg_color, bg_similarity, bg_blend)
     
     image = adjust_size(image, custom_width, custom_height)
-    transparent = PILImage.new("RGBA", (math.ceil(image.width / 100) * 100, math.ceil(image.height / 100) * 100),
+    tiles_width = math.ceil(image.width / 100)
+    tiles_height = math.ceil(image.height / 100)
+    transparent = PILImage.new("RGBA", (tiles_width * 100, tiles_height * 100),
                                (0,0,0,0))
     transparent.paste(image, (0, 0))
     image = transparent
 
     # now split image to tiles
     tiles = []
-    for i in range(math.ceil(image.height / 100)):
-        for j in range(math.ceil(image.width / 100)):
+    for i in range(tiles_height):
+        for j in range(tiles_width):
             tile = image.crop((j * 100, i * 100, (j + 1) * 100, (i + 1) * 100))
             tiles.append(tile)
-    return tiles
+    return tiles, tiles_width, tiles_height

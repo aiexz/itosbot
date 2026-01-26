@@ -7,3 +7,4 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"  # this is for local development
+        extra = "ignore"

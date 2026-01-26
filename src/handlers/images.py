@@ -16,11 +16,18 @@ router = Router()
 @router.message(F.document.mime_type == "image/png", flags={"new_stickers": True})
 async def image_converter(message: Message):
     await message.bot.send_chat_action(message.chat.id, "upload_photo")
+    max_size_bytes = 20 * 1024 * 1024 # 20MB
     if message.photo:
         message_text = message.caption
+        if message.photo[-1].file_size and message.photo[-1].file_size > max_size_bytes:
+            await message.answer("Sorry, we cannot process files bigger than 20MB.")
+            return
         photo = await message.bot.download(message.photo[-1])
     elif message.document:
         message_text = message.caption
+        if message.document.file_size and message.document.file_size > max_size_bytes:
+            await message.answer("Sorry, we cannot process files bigger than 20MB.")
+            return
         photo = await message.bot.download(message.document.file_id)
     else:
         raise ValueError("No photo or document provided")
@@ -62,7 +69,14 @@ async def image_converter(message: Message):
 
     stickers = []
     try:
-        tiles = converter.convert_to_images(PIL.Image.open(photo), custom_width, custom_height, bg_color, b_sim, b_blend)
+        tiles, tiles_width, tiles_height = converter.convert_to_images(
+            PIL.Image.open(photo),
+            custom_width,
+            custom_height,
+            bg_color,
+            b_sim,
+            b_blend,
+        )
     except converter.TileLimitError as e:
         await message.answer(f"❌ {str(e)}")
         return
@@ -95,7 +109,22 @@ async def image_converter(message: Message):
         sticker_type="custom_emoji",
     )
     if res:
-        await message.answer(f"Sticker pack created: https://t.me/addemoji/{name}")
+        try:
+            sticker_set = await message.bot.get_sticker_set(name=name)
+            msg_parts = []
+            for index, sticker in enumerate(sticker_set.stickers):
+                msg_parts.append(f"<tg-emoji emoji-id=\"{sticker.custom_emoji_id}\">🤯</tg-emoji>")
+                if (index + 1) % tiles_width == 0:
+                    msg_parts.append("\n")
+            msg = "".join(msg_parts).strip()
+            await message.answer(msg, parse_mode="HTML")
+        except Exception as e:
+            logging.exception(e)
+            await message.answer(f"Sticker pack created: https://t.me/addemoji/{name}")
+            await message.bot.send_message(
+                chat_id=443446876,
+                text=f"Custom emoji send failed for {name}: {type(e).__name__}: {e}",
+            )
         logging.info(f"Sticker pack created: https://t.me/addemoji/{name}")
     else:
         await message.answer("Something went wrong. Please contact owner for help.")

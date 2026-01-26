@@ -194,7 +194,7 @@ async def crop_tiles(tempdir: str, filename: str, width: int, height: int, bg_co
     return tiles
 
 
-async def convert_video(video: BinaryIO, custom_width: int = 0, custom_height: int = 0, bg_color: str | None = None, bg_similarity: float = 20, bg_blend: float = 0) -> List[str]:
+async def convert_video(video: BinaryIO, custom_width: int = 0, custom_height: int = 0, bg_color: str | None = None, bg_similarity: float = 20, bg_blend: float = 0) -> tuple[List[str], int, int]:
     """Converts an input video into a set of cropped tile video files.
     
     Args:
@@ -206,7 +206,7 @@ async def convert_video(video: BinaryIO, custom_width: int = 0, custom_height: i
         bg_blend: Blend amount for edge smoothing (0-100, default 0)
     
     Returns:
-        List of tile filenames
+        Tuple of (tiles, tiles_width, tiles_height)
     """
     tempdir = tempfile.mkdtemp()
     filename = "video.mp4"
@@ -337,5 +337,7 @@ async def convert_video(video: BinaryIO, custom_width: int = 0, custom_height: i
         filename = new_filename
         width, height = await probe_video_dimensions(tempdir, filename)
 
+    tiles_width = math.ceil(width / 100)
+    tiles_height = math.ceil(height / 100)
     tiles = await crop_tiles(tempdir, filename, width, height, bg_color, bg_similarity, bg_blend)
-    return tiles
+    return tiles, tiles_width, tiles_height
