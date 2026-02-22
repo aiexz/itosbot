@@ -4,6 +4,7 @@ import numpy as np
 
 from PIL import Image as PILImage
 from PIL.Image import Image
+from src.converter.colors import normalize_hex_color
 from src.converter.exceptions import TileLimitError, DimensionError
 
 
@@ -11,7 +12,7 @@ def remove_background(image: Image, bg_color: str, similarity: float = 20, blend
     """
     Remove background color from image
     :param image: Input image
-    :param bg_color: Background color in hex format (e.g., "#FFFFFF" or "FFFFFF")
+    :param bg_color: Background color as hex or name (e.g., "#FFFFFF", "FFFFFF", "white")
     :param similarity: Color similarity threshold (0-100, default 20)
     :param blend: Blend amount for edge smoothing (0-100, default 0)
     :return: Image with background removed
@@ -20,15 +21,14 @@ def remove_background(image: Image, bg_color: str, similarity: float = 20, blend
     if image.mode != 'RGBA':
         image = image.convert('RGBA')
     
-    # Parse hex color
-    bg_color = bg_color.lstrip('#')
-    if len(bg_color) == 6:
-        target_r = int(bg_color[0:2], 16)
-        target_g = int(bg_color[2:4], 16)
-        target_b = int(bg_color[4:6], 16)
-    else:
+    # Resolve named colors and normalize to 6-char hex.
+    normalized_color = normalize_hex_color(bg_color)
+    if normalized_color is None:
         logging.warning(f"Invalid background color format: {bg_color}")
         return image
+    target_r = int(normalized_color[0:2], 16)
+    target_g = int(normalized_color[2:4], 16)
+    target_b = int(normalized_color[4:6], 16)
     
     # Convert image to numpy array
     data = np.array(image)
@@ -163,7 +163,7 @@ def convert_to_images(image: Image, custom_width: int = 0, custom_height: int = 
     :param image:
     :param custom_width: Custom width in pixels (0 = auto)
     :param custom_height: Custom height in pixels (0 = auto)
-    :param bg_color: Background color to remove in hex format (e.g., "#FFFFFF")
+    :param bg_color: Background color to remove as hex or name (e.g., "#FFFFFF", "white")
     :param bg_similarity: Color similarity threshold (0-100, default 30)
     :param bg_blend: Blend amount for edge smoothing (0-100, default 0)
     :return: Tuple of (tiles, tiles_width, tiles_height)

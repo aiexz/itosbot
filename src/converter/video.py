@@ -1,4 +1,5 @@
 import io
+import logging
 import math
 import os
 import shutil
@@ -10,6 +11,7 @@ from typing import BinaryIO, Tuple, List
 import PIL
 from PIL.Image import Image
 
+from src.converter.colors import normalize_hex_color
 from src.converter.exceptions import ConversionError, TileLimitError
 
 
@@ -132,16 +134,18 @@ async def crop_tiles(tempdir: str, filename: str, width: int, height: int, bg_co
     # Add colorkey filter if background color is specified
     colorkey_filter = None
     if bg_color:
-        # Parse hex color to format for ffmpeg
-        bg_color_clean = bg_color.lstrip('#')
-        if len(bg_color_clean) == 6:
+        # Resolve named colors and normalize to 6-char hex.
+        normalized_color = normalize_hex_color(bg_color)
+        if normalized_color:
             # Convert hex to 0xRRGGBB format for ffmpeg
-            color_value = f"0x{bg_color_clean}"
+            color_value = f"0x{normalized_color}"
             # Convert similarity (0-100) to ffmpeg similarity (0.0-1.0)
             similarity_value = bg_similarity / 100.0
             # Convert blend (0-100) to ffmpeg blend (0.0-1.0)
             blend_value = bg_blend / 100.0
             colorkey_filter = f"colorkey={color_value}:{similarity_value}:{blend_value}"
+        else:
+            logging.warning("Invalid background color format: %s", bg_color)
     
     oversized_tiles = []
     source_video = f"{tempdir}/{filename}"
@@ -202,7 +206,7 @@ async def convert_video(video: BinaryIO, custom_width: int = 0, custom_height: i
         video: Input video file as BinaryIO
         custom_width: Custom width in pixels (0 = auto)
         custom_height: Custom height in pixels (0 = auto)
-        bg_color: Background color to remove in hex format (e.g., "#FFFFFF")
+        bg_color: Background color to remove as hex or name (e.g., "#FFFFFF", "white")
         bg_similarity: Color similarity threshold (0-100, default 20)
         bg_blend: Blend amount for edge smoothing (0-100, default 0)
     
