@@ -37,7 +37,9 @@ async def image_converter(message: Message):
     if message_text and message_text.startswith("/convert"):
         # shoutout to @drip_tech for this style
         command_args = message_text.removeprefix("/convert").strip().split()
-        command_map = {k: v for k, v in (arg.split("=") for arg in command_args if "=" in arg)}
+        command_map = {
+            k: v for k, v in (arg.split("=", 1) for arg in command_args if "=" in arg)
+        }
         try:
             custom_width = int(command_map.get("w", 0))
             custom_width = max(0, custom_width) # width can't be negative
@@ -100,14 +102,19 @@ async def image_converter(message: Message):
             )
         )
     name = f"emojis_{message.from_user.id}_{utils.random_string()}_by_{(await message.bot.me()).username}"
-    res = await message.bot.create_new_sticker_set(
-        user_id=message.from_user.id,
-        name=name,
-        title=title,
-        stickers=stickers,
-        sticker_format="static",
-        sticker_type="custom_emoji",
-    )
+    try:
+        res = await message.bot.create_new_sticker_set(
+            user_id=message.from_user.id,
+            name=name,
+            title=title,
+            stickers=stickers,
+            sticker_format="static",
+            sticker_type="custom_emoji",
+        )
+    except Exception as e:
+        logging.exception(e)
+        await message.answer("Failed to create sticker set. Please try again later.")
+        return
     if res:
         try:
             sticker_set = await message.bot.get_sticker_set(name=name)

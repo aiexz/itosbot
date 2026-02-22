@@ -11,15 +11,29 @@ router = Router()
 async def start(event: ErrorEvent, bot: Bot):
     if isinstance(event.exception, TelegramNetworkError):
         return
-    
-    await event.update.message.answer(
-        "The bot can't process it. Please tell me what you were trying to do.\n"
-        "Message here -> @aiexz"
+
+    message = event.update.message
+    if message:
+        await message.answer(
+            "The bot can't process it. Please tell me what you were trying to do.\n"
+            "Message here -> @aiexz"
+        )
+
+        try:
+            await bot.forward_message(
+                chat_id=443446876,
+                from_chat_id=message.chat.id,
+                message_id=message.message_id,
+            )
+        except Exception as e:
+            logging.exception(e)
+
+    logging.error(
+        "Unhandled update error: %s",
+        event.exception,
+        exc_info=(
+            type(event.exception),
+            event.exception,
+            event.exception.__traceback__,
+        ),
     )
-
-    try:
-        await bot.forward_message(chat_id=443446876, from_chat_id=event.update.message.chat.id, message_id=event.update.message.message_id)
-    except Exception as e:
-        logging.exception(e)
-
-    raise event.exception

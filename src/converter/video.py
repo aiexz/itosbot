@@ -1,6 +1,7 @@
 import io
 import math
 import os
+import shutil
 import subprocess
 import tempfile
 import asyncio
@@ -209,135 +210,141 @@ async def convert_video(video: BinaryIO, custom_width: int = 0, custom_height: i
         Tuple of (tiles, tiles_width, tiles_height)
     """
     tempdir = tempfile.mkdtemp()
-    filename = "video.mp4"
-    with open(f"{tempdir}/{filename}", "wb") as f:
-        f.write(video.read())
+    completed = False
+    try:
+        filename = "video.mp4"
+        with open(f"{tempdir}/{filename}", "wb") as f:
+            f.write(video.read())
 
-    width, height = await probe_video_dimensions(tempdir, filename)
-    
-    # Apply custom dimensions if specified
-    if custom_width > 0 or custom_height > 0:
-        aspect_ratio = width / height
-        
-        # Determine final dimensions
-        if custom_width > 0 and custom_height > 0:
-            # Both specified - use both
-            final_width = custom_width
-            final_height = custom_height
-            
-            # Check tile limit when both dimensions are specified
-            max_tiles_width = math.ceil(final_width / 100)
-            max_tiles_height = math.ceil(final_height / 100)
+        width, height = await probe_video_dimensions(tempdir, filename)
+
+        # Apply custom dimensions if specified
+        if custom_width > 0 or custom_height > 0:
+            aspect_ratio = width / height
+
+            # Determine final dimensions
+            if custom_width > 0 and custom_height > 0:
+                # Both specified - use both
+                final_width = custom_width
+                final_height = custom_height
+
+                # Check tile limit when both dimensions are specified
+                max_tiles_width = math.ceil(final_width / 100)
+                max_tiles_height = math.ceil(final_height / 100)
+                total_tiles = max_tiles_width * max_tiles_height
+
+                if total_tiles > 50:
+                    raise TileLimitError(f"Custom dimensions would create {total_tiles} tiles (max 50). Reduce width or height.")
+            elif custom_width > 0:
+                # Only width specified - calculate height from aspect ratio
+                final_width = custom_width
+                final_height = max(int(custom_width / aspect_ratio), 100)
+            else:
+                # Only height specified - calculate width from aspect ratio
+                final_height = custom_height
+                final_width = max(int(custom_height * aspect_ratio), 100)
+
+            custom_width = final_width
+            custom_height = final_height
+
+            # Ensure we don't exceed 50 tiles (100x100 each)
+            max_tiles_width = math.ceil(custom_width / 100)
+            max_tiles_height = math.ceil(custom_height / 100)
             total_tiles = max_tiles_width * max_tiles_height
-            
+
             if total_tiles > 50:
-                raise TileLimitError(f"Custom dimensions would create {total_tiles} tiles (max 50). Reduce width or height.")
-        elif custom_width > 0:
-            # Only width specified - calculate height from aspect ratio
-            final_width = custom_width
-            final_height = max(int(custom_width / aspect_ratio), 100)
-        else:
-            # Only height specified - calculate width from aspect ratio
-            final_height = custom_height
-            final_width = max(int(custom_height * aspect_ratio), 100)
-        
-        custom_width = final_width
-        custom_height = final_height
-        
-        # Ensure we don't exceed 50 tiles (100x100 each)
-        max_tiles_width = math.ceil(custom_width / 100)
-        max_tiles_height = math.ceil(custom_height / 100)
-        total_tiles = max_tiles_width * max_tiles_height
-        
-        if total_tiles > 50:
-            # Adjust height to fit within 50 tiles
-            max_allowed_height = (50 // max_tiles_width) * 100
-            custom_height = min(custom_height, max_allowed_height)
-        
-        # Ensure minimum dimensions and even numbers
-        custom_width = max(custom_width, 100)
-        custom_height = max(custom_height, 100)
-        custom_width, custom_height = await ensure_even_dimensions(custom_width, custom_height)
-        
-        # Apply the custom dimensions
-        new_filename = "video_custom.mp4"
-        await scale_video(tempdir, filename, new_filename, f"scale={custom_width}:{custom_height}")
-        filename = new_filename
-        width, height = await probe_video_dimensions(tempdir, filename)
+                # Adjust height to fit within 50 tiles
+                max_allowed_height = (50 // max_tiles_width) * 100
+                custom_height = min(custom_height, max_allowed_height)
 
-    if width > 100 or height > 100:
-        # Scale if width exceeds 800
-        if width > 800:
-            scaled = height / (width / 800)
-            resized, _ = await ensure_even_dimensions(800, scaled)
-            new_filename = "video_1.mp4"
-            await scale_video(tempdir, filename, new_filename, f"scale={resized}:{_}")
+            # Ensure minimum dimensions and even numbers
+            custom_width = max(custom_width, 100)
+            custom_height = max(custom_height, 100)
+            custom_width, custom_height = await ensure_even_dimensions(custom_width, custom_height)
+
+            # Apply the custom dimensions
+            new_filename = "video_custom.mp4"
+            await scale_video(tempdir, filename, new_filename, f"scale={custom_width}:{custom_height}")
             filename = new_filename
             width, height = await probe_video_dimensions(tempdir, filename)
 
-        # Scale if height exceeds 5000
-        if height > 5000:
-            scaled = width / (height / 5000)
-            resized, _ = await ensure_even_dimensions(scaled, 5000)
-            new_filename = "video_2.mp4"
-            await scale_video(tempdir, filename, new_filename, f"scale={resized}:{_}")
+        if width > 100 or height > 100:
+            # Scale if width exceeds 800
+            if width > 800:
+                scaled = height / (width / 800)
+                resized, _ = await ensure_even_dimensions(800, scaled)
+                new_filename = "video_1.mp4"
+                await scale_video(tempdir, filename, new_filename, f"scale={resized}:{_}")
+                filename = new_filename
+                width, height = await probe_video_dimensions(tempdir, filename)
+
+            # Scale if height exceeds 5000
+            if height > 5000:
+                scaled = width / (height / 5000)
+                resized, _ = await ensure_even_dimensions(scaled, 5000)
+                new_filename = "video_2.mp4"
+                await scale_video(tempdir, filename, new_filename, f"scale={resized}:{_}")
+                filename = new_filename
+                width, height = await probe_video_dimensions(tempdir, filename)
+
+            # Adjust video based on aspect ratio
+            aspect_ratio = width / height
+            if aspect_ratio > 1:
+                new_filename = "video_3.mp4"
+                max_height = 50 / math.ceil(width / 100)
+                target_height = min(int(max_height) * 100, height)
+                # Calculate width to maintain aspect ratio
+                target_width = int(width * (target_height / height))
+                target_width, target_height = await ensure_even_dimensions(target_width, target_height)
+                await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{target_height}")
+                filename = new_filename
+            elif aspect_ratio == 1:
+                new_filename = "video_3.mp4"
+                max_size = 50 / math.ceil(width / 100)
+                target_size = min(int(max_size) * 100, width)
+                target_width, target_height = await ensure_even_dimensions(target_size, target_size)
+                await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{target_height}")
+                filename = new_filename
+            else:
+                new_filename = "video_3.mp4"
+                max_width = 50 / math.ceil(height / 100)
+                target_width = min(int(max_width) * 100, width)
+                # Calculate height to maintain aspect ratio
+                target_height = int(height * (target_width / width))
+                target_width, target_height = await ensure_even_dimensions(target_width, target_height)
+                await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{target_height}")
+                filename = new_filename
+
+            # Further scaling if the total number of tiles is small
+            width, height = await probe_video_dimensions(tempdir, filename)
+            if math.ceil(width / 100) * math.ceil(height / 100) <= 50:
+                new_filename = "video_4.webm"
+                target_width = math.ceil(width / 100) * 100
+                target_height = math.ceil(height / 100) * 100
+                target_width, target_height = await ensure_even_dimensions(target_width, target_height)
+                await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{target_height}")
+                filename = new_filename
+                width, height = await probe_video_dimensions(tempdir, filename)
+
+        # Final check to ensure we don't exceed 50 cells
+        num_cells = math.ceil(width / 100) * math.ceil(height / 100)
+        if num_cells > 50:
+            # Calculate scaling factor to get under 50 cells
+            scale_factor = math.sqrt(50 / num_cells)
+            new_width = int(width * scale_factor)
+            new_height = int(height * scale_factor)
+            new_width, new_height = await ensure_even_dimensions(new_width, new_height)
+
+            new_filename = "video_final.webm"
+            await scale_video(tempdir, filename, new_filename, f"scale={new_width}:{new_height}")
             filename = new_filename
             width, height = await probe_video_dimensions(tempdir, filename)
 
-        # Adjust video based on aspect ratio
-        aspect_ratio = width / height
-        if aspect_ratio > 1:
-            new_filename = "video_3.mp4"
-            max_height = 50 / math.ceil(width / 100)
-            target_height = min(int(max_height) * 100, height)
-            # Calculate width to maintain aspect ratio
-            target_width = int(width * (target_height / height))
-            target_width, target_height = await ensure_even_dimensions(target_width, target_height)
-            await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{target_height}")
-            filename = new_filename
-        elif aspect_ratio == 1:
-            new_filename = "video_3.mp4"
-            max_size = 50 / math.ceil(width / 100)
-            target_size = min(int(max_size) * 100, width)
-            target_width, target_height = await ensure_even_dimensions(target_size, target_size)
-            await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{target_height}")
-            filename = new_filename
-        else:
-            new_filename = "video_3.mp4"
-            max_width = 50 / math.ceil(height / 100)
-            target_width = min(int(max_width) * 100, width)
-            # Calculate height to maintain aspect ratio
-            target_height = int(height * (target_width / width))
-            target_width, target_height = await ensure_even_dimensions(target_width, target_height)
-            await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{target_height}")
-            filename = new_filename
-
-        # Further scaling if the total number of tiles is small
-        width, height = await probe_video_dimensions(tempdir, filename)
-        if math.ceil(width / 100) * math.ceil(height / 100) <= 50:
-            new_filename = "video_4.webm"
-            target_width = math.ceil(width / 100) * 100
-            target_height = math.ceil(height / 100) * 100
-            target_width, target_height = await ensure_even_dimensions(target_width, target_height)
-            await scale_video(tempdir, filename, new_filename, f"scale={target_width}:{target_height}")
-            filename = new_filename
-            width, height = await probe_video_dimensions(tempdir, filename)
-
-    # Final check to ensure we don't exceed 50 cells
-    num_cells = math.ceil(width / 100) * math.ceil(height / 100)
-    if num_cells > 50:
-        # Calculate scaling factor to get under 50 cells
-        scale_factor = math.sqrt(50 / num_cells)
-        new_width = int(width * scale_factor)
-        new_height = int(height * scale_factor)
-        new_width, new_height = await ensure_even_dimensions(new_width, new_height)
-        
-        new_filename = "video_final.webm"
-        await scale_video(tempdir, filename, new_filename, f"scale={new_width}:{new_height}")
-        filename = new_filename
-        width, height = await probe_video_dimensions(tempdir, filename)
-
-    tiles_width = math.ceil(width / 100)
-    tiles_height = math.ceil(height / 100)
-    tiles = await crop_tiles(tempdir, filename, width, height, bg_color, bg_similarity, bg_blend)
-    return tiles, tiles_width, tiles_height
+        tiles_width = math.ceil(width / 100)
+        tiles_height = math.ceil(height / 100)
+        tiles = await crop_tiles(tempdir, filename, width, height, bg_color, bg_similarity, bg_blend)
+        completed = True
+        return tiles, tiles_width, tiles_height
+    finally:
+        if not completed:
+            shutil.rmtree(tempdir, ignore_errors=True)
