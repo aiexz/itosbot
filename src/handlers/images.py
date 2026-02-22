@@ -13,7 +13,7 @@ router = Router()
 
 
 @router.message(F.photo, flags={"new_stickers": True})
-@router.message(F.document.mime_type == "image/png", flags={"new_stickers": True})
+@router.message(F.document.mime_type.in_(["image/png", "image/jpeg", "image/webp"]), flags={"new_stickers": True})
 async def image_converter(message: Message):
     await message.bot.send_chat_action(message.chat.id, "upload_photo")
     max_size_bytes = 20 * 1024 * 1024 # 20MB
