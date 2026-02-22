@@ -12,6 +12,22 @@ import src.utils as utils
 router = Router()
 
 
+@router.message(
+    F.document.mime_type.in_(["image/heic", "image/heif"]),
+    flags={"new_stickers": True},
+)
+@router.message(
+    lambda message: bool(
+        message.document
+        and message.document.file_name
+        and message.document.file_name.lower().endswith((".heic", ".heif"))
+    ),
+    flags={"new_stickers": True},
+)
+async def unsupported_heic(message: Message):
+    await message.answer("Sorry, .heic/.heif images are not supported.")
+
+
 @router.message(F.photo, flags={"new_stickers": True})
 @router.message(F.document.mime_type.in_(["image/png", "image/jpeg", "image/webp"]), flags={"new_stickers": True})
 async def image_converter(message: Message):
