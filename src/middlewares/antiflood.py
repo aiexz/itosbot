@@ -1,7 +1,6 @@
-'''AntiFloodMiddleware module handles flood control by limiting high-frequency message events.'''
+"""AntiFloodMiddleware module handles flood control by limiting high-frequency message events."""
 
 import logging
-from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware
@@ -9,11 +8,15 @@ from aiogram.dispatcher.flags import get_flag
 from aiogram.exceptions import TelegramRetryAfter
 from aiogram.types import Message
 
+from src.sticker_rate_limit import (
+    format_retry_message,
+    get_retry_until,
+    save_retry_after,
+)
+
 
 class AntiFloodMiddleware(BaseMiddleware):
     """Middleware to prevent message flooding by enforcing a cooldown period per user."""
-    def __init__(self) -> None:
-        self.flood_cache: Dict[int, datetime] = {}
 
     async def __call__(
             self,
@@ -32,19 +35,29 @@ class AntiFloodMiddleware(BaseMiddleware):
             The result from the handler if not throttled, otherwise None.
         """
         if get_flag(data, "new_stickers"):
+            if event.from_user is None:
+                return await handler(event, data)
+
             user_id = event.from_user.id
-            now = datetime.now()
-            if user_id in self.flood_cache and self.flood_cache[user_id] > now:
-                logging.info("User %s is sending messages too frequently; ignoring.", user_id)
+            retry_until = get_retry_until(user_id)
+            if retry_until is not None:
+                logging.info(
+                    "User %s is blocked from sticker creation until %s.",
+                    user_id,
+                    retry_until.isoformat(),
+                )
+                await event.answer(format_retry_message(retry_until))
                 return
-            else:
-                self.flood_cache.pop(user_id, None)
             try:
                 return await handler(event, data)
             except TelegramRetryAfter as e:
-                self.flood_cache[user_id] = now + timedelta(seconds=e.retry_after)
-                logging.info("Too many requests from %s. Try again in %s seconds.", user_id, e.retry_after)
+                retry_until = save_retry_after(user_id, e.retry_after)
+                logging.info(
+                    "Too many requests from %s. Try again after %s.",
+                    user_id,
+                    retry_until.isoformat(),
+                )
+                await event.answer(format_retry_message(retry_until))
                 return
         else:
             return await handler(event, data)
-

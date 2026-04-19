@@ -188,7 +188,7 @@ async def crop_tiles(tempdir: str, filename: str, width: int, height: int, bg_co
     
     # Try to fix oversized tiles with higher compression
     if oversized_tiles:
-        max_size = max(size for _, size in oversized_tiles)
+        max_size = max(file_size for _, _, file_size in oversized_tiles)
         max_size_kb = max_size / 1024
         raise ConversionError(
             f"Video quality is too high for Telegram's limits. "

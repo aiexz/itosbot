@@ -4,10 +4,12 @@ import tempfile
 
 import aiogram.types.input_file
 from aiogram import Router, F
+from aiogram.exceptions import TelegramRetryAfter
 from aiogram.types import Message
 
 import src.converter.video as converter
 from src import utils
+from src.sticker_rate_limit import format_retry_message, save_retry_after
 
 router = Router()
 
@@ -159,6 +161,15 @@ async def video_converter(message: Message):
                 needs_repainting=False,
                 sticker_type="custom_emoji",
             )
+        except TelegramRetryAfter as e:
+            retry_until = save_retry_after(message.from_user.id, e.retry_after)
+            logging.info(
+                "Sticker creation rate limited for user %s until %s.",
+                message.from_user.id,
+                retry_until.isoformat(),
+            )
+            await message.answer(format_retry_message(retry_until))
+            return
         except Exception as e:
             logging.exception(e)
             await message.answer("Failed to create sticker set. Please try again later.")
