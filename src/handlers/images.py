@@ -136,6 +136,9 @@ async def image_converter(message: Message):
             message.from_user.id,
             retry_until.isoformat(),
         )
+        # if it is "SendMessage" flood limit, we cannot send a message to the user
+        if e.method == "SendMessage":
+            return
         await message.answer(format_retry_message(retry_until))
         return
     except Exception as e:
