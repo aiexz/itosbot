@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import json
 from typing import Any
 
 import aiogram.client.telegram
@@ -31,25 +32,25 @@ def _patch_poll_data(obj: Any) -> None:
             _patch_poll_data(item)
 
 
-class PatchedSession(AiohttpSession):
-    """AiohttpSession that patches JSON responses for local Bot API server compatibility."""
-
-    def json_loads(self, value: str, /, **kwargs: Any) -> Any:
-        data = super().json_loads(value, **kwargs)
-        _patch_poll_data(data)
-        return data
+def _patched_json_loads(value: str, **kwargs: Any) -> Any:
+    """JSON loader that injects defaults for newer Bot API fields the local server omits."""
+    data = json.loads(value, **kwargs)
+    _patch_poll_data(data)
+    return data
 
 
-
-async def create_bot_session() -> PatchedSession:
-    """Creates and returns a bot session using a local Telegram API if available, falling back to the default server."""
+async def create_bot_session() -> AiohttpSession:
+    """Creates a bot session using the local Telegram API if available, falling back to the default server."""
     try:
         async with aiohttp.ClientSession() as session:
             await session.get("http://nginx")
-        return PatchedSession(api=TelegramAPIServer.from_base('http://nginx'))
+        return AiohttpSession(
+            api=TelegramAPIServer.from_base("http://nginx"),
+            json_loads=_patched_json_loads,
+        )
     except aiohttp.ClientConnectorError as e:
         logging.warning("Can't connect to local bot api, using default server. Error: %s", e)
-        return PatchedSession()
+        return AiohttpSession(json_loads=_patched_json_loads)
 
 
 async def main() -> None:
