@@ -7,10 +7,30 @@ import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
+from aiogram.types import Poll, PollOption
 
 from src.handlers import setup_routers
 from src.middlewares import AntiFloodMiddleware
 from src.settings import Settings
+
+
+def _patch_poll_models() -> None:
+    """Make newer Telegram Bot API fields optional for local Bot API server compatibility."""
+    for model, fields in [
+        (PollOption, ["persistent_id"]),
+        (Poll, ["allows_revoting", "members_only"]),
+    ]:
+        for field in fields:
+            f = model.model_fields.get(field)
+            if f is not None and f.is_required():
+                f.default = None
+                f.annotation = f.annotation | None  # type: ignore[assignment]
+                f.json_schema_extra = f.json_schema_extra or {}
+    Poll.model_rebuild(force=True)
+    PollOption.model_rebuild(force=True)
+
+
+_patch_poll_models()
 
 settings = Settings()
 
