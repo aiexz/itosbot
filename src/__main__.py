@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import Any
 
 import aiogram.client.telegram
 import aiogram.fsm.storage.memory
@@ -7,43 +8,48 @@ import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
-from aiogram.types import Poll, PollOption
 
 from src.handlers import setup_routers
 from src.middlewares import AntiFloodMiddleware
 from src.settings import Settings
 
-
-def _patch_poll_models() -> None:
-    """Make newer Telegram Bot API fields optional for local Bot API server compatibility."""
-    for model, fields in [
-        (PollOption, ["persistent_id"]),
-        (Poll, ["allows_revoting", "members_only"]),
-    ]:
-        for field in fields:
-            f = model.model_fields.get(field)
-            if f is not None and f.is_required():
-                f.default = None
-                f.annotation = f.annotation | None  # type: ignore[assignment]
-                f.json_schema_extra = f.json_schema_extra or {}
-    Poll.model_rebuild(force=True)
-    PollOption.model_rebuild(force=True)
-
-
-_patch_poll_models()
-
 settings = Settings()
 
 
-async def create_bot_session() -> AiohttpSession:
+def _patch_poll_data(obj: Any) -> None:
+    """Recursively inject defaults for newer Telegram Bot API fields missing from local server."""
+    if isinstance(obj, dict):
+        if "allows_multiple_answers" in obj and "allows_revoting" not in obj:
+            obj.setdefault("allows_revoting", False)
+            obj.setdefault("members_only", False)
+        if "voter_count" in obj and "text" in obj and "persistent_id" not in obj:
+            obj.setdefault("persistent_id", "")
+        for v in obj.values():
+            _patch_poll_data(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            _patch_poll_data(item)
+
+
+class PatchedSession(AiohttpSession):
+    """AiohttpSession that patches JSON responses for local Bot API server compatibility."""
+
+    def json_loads(self, value: str, /, **kwargs: Any) -> Any:
+        data = super().json_loads(value, **kwargs)
+        _patch_poll_data(data)
+        return data
+
+
+
+async def create_bot_session() -> PatchedSession:
     """Creates and returns a bot session using a local Telegram API if available, falling back to the default server."""
     try:
         async with aiohttp.ClientSession() as session:
             await session.get("http://nginx")
-        return AiohttpSession(api=TelegramAPIServer.from_base('http://nginx'))
+        return PatchedSession(api=TelegramAPIServer.from_base('http://nginx'))
     except aiohttp.ClientConnectorError as e:
         logging.warning("Can't connect to local bot api, using default server. Error: %s", e)
-        return AiohttpSession()
+        return PatchedSession()
 
 
 async def main() -> None:
