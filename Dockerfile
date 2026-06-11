@@ -15,7 +15,8 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.2 /uv /uvx /bin/
 
 COPY pyproject.toml uv.lock ./
 
-RUN uv pip install --system -e .
+ENV UV_PROJECT_ENVIRONMENT=/usr/local
+RUN uv sync --locked --no-dev --no-install-project
 
 FROM base AS final
 
