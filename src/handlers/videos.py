@@ -115,6 +115,9 @@ async def video_converter(message: Message):
             )
             return
         video = await message.bot.download(message.video.file_id)
+    if video is None:
+        await message.answer("Failed to download video.")
+        return
 
     result: list[str] = []
     try:

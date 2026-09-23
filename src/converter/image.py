@@ -38,32 +38,108 @@ def remove_background(image: Image, bg_color: str, similarity: float = 20, blend
     similarity_normalized = similarity / 100.0
     blend_normalized = blend / 100.0
     
-    # Calculate color distance
-    distance = np.sqrt(
-        ((r.astype(float) - target_r) ** 2 +
-         (g.astype(float) - target_g) ** 2 +
-         (b.astype(float) - target_b) ** 2) / (255.0 ** 2 * 3)
-    )
-    
-    # Create mask based on similarity
+    # Calculate color distance without extra float64 copies
+    dr = r.astype(np.int32) - target_r
+    dg = g.astype(np.int32) - target_g
+    db = b.astype(np.int32) - target_b
+    sq_dist = dr * dr + dg * dg + db * db
+    distance = np.sqrt(sq_dist * (1.0 / (255.0 ** 2 * 3)), dtype=np.float32)
+
     if blend_normalized > 0:
-        # Smooth transition
-        mask = np.clip((distance - similarity_normalized) / blend_normalized, 0, 1)
-        a = (a * mask).astype(np.uint8)
+        is_bg_candidate = (distance < (similarity_normalized + blend_normalized)) | (a == 0)
     else:
-        # Hard edge
-        mask = distance > similarity_normalized
-        a = np.where(mask, a, 0).astype(np.uint8)
-    
-    # Update alpha channel
-    data[:, :, 3] = a
-    
-    return PILImage.fromarray(data, 'RGBA')
+        is_bg_candidate = (distance <= similarity_normalized) | (a == 0)
+
+    # Pad by 1 pixel on all borders so (0, 0) connects to all 4 outer edges of the image
+    h, w = distance.shape
+    padded = np.zeros((h + 2, w + 2), dtype=np.uint8)
+    padded[0, :] = 255
+    padded[-1, :] = 255
+    padded[:, 0] = 255
+    padded[:, -1] = 255
+    padded[1:h + 1, 1:w + 1][is_bg_candidate] = 255
+
+    _scanline_floodfill(padded, 0, 0, 255, 128)
+    connected = padded[1:h + 1, 1:w + 1] == 128
+
+    if blend_normalized > 0:
+        factor = np.clip((distance[connected] - similarity_normalized) / blend_normalized, 0, 1)
+        data[:, :, 3][connected] = (a[connected] * factor).astype(np.uint8)
+    else:
+        to_remove = connected & (distance <= similarity_normalized)
+        data[:, :, 3][to_remove] = 0
+    return PILImage.fromarray(data)
+
+
+def _scanline_floodfill(grid: np.ndarray, seed_x: int = 0, seed_y: int = 0, target_val: int = 255, fill_val: int = 128) -> None:
+    """4-connected span-based scanline flood fill on uint8 grid in-place."""
+    h, w = grid.shape
+    stack = [(seed_x, seed_y)]
+    while stack:
+        x, y = stack.pop()
+        row = grid[y]
+        if row[x] != target_val:
+            continue
+
+        left_blocked = np.flatnonzero(row[:x] != target_val)
+        x1 = 0 if len(left_blocked) == 0 else left_blocked[-1] + 1
+
+        right_blocked = np.flatnonzero(row[x + 1:] != target_val)
+        x2 = w - 1 if len(right_blocked) == 0 else x + right_blocked[0]
+
+        row[x1:x2 + 1] = fill_val
+
+        if y > 0:
+            above = grid[y - 1, x1:x2 + 1]
+            mask_above = above == target_val
+            if np.any(mask_above):
+                starts = np.flatnonzero(mask_above & ~np.r_[False, mask_above[:-1]])
+                for sx in x1 + starts:
+                    stack.append((int(sx), y - 1))
+
+        if y < h - 1:
+            below = grid[y + 1, x1:x2 + 1]
+            mask_below = below == target_val
+            if np.any(mask_below):
+                starts = np.flatnonzero(mask_below & ~np.r_[False, mask_below[:-1]])
+                for sx in x1 + starts:
+                    stack.append((int(sx), y + 1))
+
+
+def _fit_proportional(w: int, h: int, max_w: float, max_h: float, max_tiles: int = 50) -> tuple[int, int]:
+    """Fit dimensions proportionally within max bounds and tile count (max_tiles)."""
+    tiles_w = math.ceil(w / 100)
+    tiles_h = math.ceil(h / 100)
+    if w <= max_w and h <= max_h and tiles_w * tiles_h <= max_tiles:
+        return w, h
+
+    max_scale = min(1.0, max_w / w, max_h / h)
+    best_scale = 0.0
+    best_w, best_h = max(1, round(w * max_scale)), max(1, round(h * max_scale))
+
+    limit_tw = max_tiles if math.isinf(max_w) else min(max_tiles, math.ceil(max_w / 100))
+    for tw in range(1, limit_tw + 1):
+        th = max_tiles // tw
+        if th == 0:
+            continue
+        box_w = min(tw * 100, max_w)
+        box_h = min(th * 100, max_h)
+        scale = min(box_w / w, box_h / h, max_scale)
+        if scale > best_scale:
+            cand_w = max(1, round(w * scale))
+            cand_h = max(1, round(h * scale))
+            if math.ceil(cand_w / 100) * math.ceil(cand_h / 100) <= max_tiles:
+                best_scale = scale
+                best_w, best_h = cand_w, cand_h
+
+    return best_w, best_h
 
 
 def adjust_size(image: Image, custom_width: int = 0, custom_height: int = 0) -> Image:
     """
-    Adjust image size to be in range 100x100 - 800x5000 that is max 50 tiles in total
+    Adjust image size to be max 50 tiles (100x100 each) and within 800x5000 for default.
+    Preserves aspect ratio for default and single requested dimension.
+    Explicit both dimensions enforces max 50 tiles.
     :param image:
     :param custom_width: Custom width in pixels (0 = auto)
     :param custom_height: Custom height in pixels (0 = auto)
@@ -75,85 +151,38 @@ def adjust_size(image: Image, custom_width: int = 0, custom_height: int = 0) -> 
         logging.debug("Image size is not ok", aspect_ratio)
         raise DimensionError("Image aspect ratio is not supported (must be between 0.02 and 50)")
     
-    # Apply custom dimensions if specified
-    if custom_width > 0 or custom_height > 0:
-        # Determine final dimensions
-        if custom_width > 0 and custom_height > 0:
-            # Both specified - use both
-            logging.debug(f"Applying custom width: {custom_width}px and height: {custom_height}px")
-            final_width = custom_width
-            final_height = custom_height
-            
-            # Check tile limit when both dimensions are specified
-            max_tiles_width = math.ceil(final_width / 100)
-            max_tiles_height = math.ceil(final_height / 100)
-            total_tiles = max_tiles_width * max_tiles_height
-            
-            if total_tiles > 50:
-                raise TileLimitError(f"Custom dimensions would create {total_tiles} tiles (max 50). Reduce width or height.")
-        elif custom_width > 0:
-            # Only width specified - calculate height from aspect ratio
-            logging.debug(f"Applying custom width: {custom_width}px")
-            final_width = custom_width
-            final_height = max(int(custom_width / aspect_ratio), 100)
-        else:
-            # Only height specified - calculate width from aspect ratio
-            logging.debug(f"Applying custom height: {custom_height}px")
-            final_height = custom_height
-            final_width = max(int(custom_height * aspect_ratio), 100)
-        
-        custom_width = final_width
-        custom_height = final_height
-        
-        # Ensure we don't exceed 50 tiles (100x100 each)
+    # Both dimensions specified - intentional sizing and tile limit enforcement
+    if custom_width > 0 and custom_height > 0:
         max_tiles_width = math.ceil(custom_width / 100)
         max_tiles_height = math.ceil(custom_height / 100)
         total_tiles = max_tiles_width * max_tiles_height
-        
         if total_tiles > 50:
-            # Adjust height to fit within 50 tiles
-            max_allowed_height = (50 // max_tiles_width) * 100
-            custom_height = min(custom_height, max_allowed_height)
-            logging.debug(f"Adjusted height to {custom_height}px to stay within 50 tiles limit")
-        
-        # Ensure minimum dimensions
-        custom_width = max(custom_width, 100)
-        custom_height = max(custom_height, 100)
-        
-        image = image.resize((custom_width, custom_height))
+            raise TileLimitError(f"Custom dimensions would create {total_tiles} tiles (max 50). Reduce width or height.")
+        if image.size != (custom_width, custom_height):
+            image = image.resize((custom_width, custom_height))
         return image
-    
-    if image.width > 100 or image.height > 100:
-        logging.debug("Resizing image")
-        # Calculate final dimensions in one pass to avoid multiple resizes
-        final_width = image.width
-        final_height = image.height
-        
-        # Apply width constraint
-        if final_width > 800:
-            final_width = 800
-            final_height = max(int(800 / aspect_ratio), 100)
-        
-        # Apply height constraint
-        if final_height > 5000:
-            final_height = 5000
-            final_width = max(int(5000 * aspect_ratio), 100)
 
-        # Apply tile constraint (max 50 tiles of 100x100 each)
-        if aspect_ratio > 1:
-            max_height = 50 / math.ceil(final_width / 100)
-            final_height = min(int(max_height) * 100, final_height)
-        elif aspect_ratio == 1:
-            max_size = 50 / math.ceil(final_width / 100)
-            final_width = min(int(max_size) * 100, final_width)
-            final_height = min(int(max_size) * 100, final_height)
-        else:
-            max_width = 50 / math.ceil(final_height / 100)
-            final_width = min(int(max_width) * 100, final_width)
-        
-        # Perform single resize operation
-        if final_width != image.width or final_height != image.height:
-            image = image.resize((final_width, final_height))
+    # Single custom dimension - scale proportionally within 50 tiles
+    if custom_width > 0:
+        target_w = custom_width
+        target_h = max(1, round(custom_width / aspect_ratio))
+        final_w, final_h = _fit_proportional(target_w, target_h, max_w=target_w, max_h=float("inf"), max_tiles=50)
+        if (final_w, final_h) != image.size:
+            image = image.resize((final_w, final_h))
+        return image
+
+    if custom_height > 0:
+        target_h = custom_height
+        target_w = max(1, round(custom_height * aspect_ratio))
+        final_w, final_h = _fit_proportional(target_w, target_h, max_w=float("inf"), max_h=target_h, max_tiles=50)
+        if (final_w, final_h) != image.size:
+            image = image.resize((final_w, final_h))
+        return image
+
+    # Default sizing: max 800 width, max 5000 height, max 50 tiles
+    final_w, final_h = _fit_proportional(image.width, image.height, max_w=800, max_h=5000, max_tiles=50)
+    if (final_w, final_h) != image.size:
+        image = image.resize((final_w, final_h))
     return image
 
 
@@ -168,10 +197,21 @@ def convert_to_images(image: Image, custom_width: int = 0, custom_height: int = 
     :param bg_blend: Blend amount for edge smoothing (0-100, default 0)
     :return: Tuple of (tiles, tiles_width, tiles_height)
     """
+    # Convert image to RGBA if not already (preserves palette transparency)
+    if image.mode != 'RGBA':
+        image = image.convert('RGBA')
+
     # Remove background if color is specified
     if bg_color:
         image = remove_background(image, bg_color, bg_similarity, bg_blend)
-    
+
+    # Auto-crop fully transparent outer margins using alpha getbbox
+    alpha = image.getchannel('A')
+    bbox = alpha.getbbox()
+    if bbox is None:
+        raise ValueError("Image is completely transparent")
+    if bbox != (0, 0, image.width, image.height):
+        image = image.crop(bbox)
     image = adjust_size(image, custom_width, custom_height)
     tiles_width = math.ceil(image.width / 100)
     tiles_height = math.ceil(image.height / 100)

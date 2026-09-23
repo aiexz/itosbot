@@ -1,5 +1,7 @@
+import asyncio
 import io
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 import PIL.Image
 import aiogram
@@ -12,6 +14,29 @@ import src.utils as utils
 from src.sticker_rate_limit import format_retry_message, save_retry_after
 
 router = Router()
+
+# ponytail: one image worker caps peak pixel-buffer memory; increase only with a memory budget.
+_IMAGE_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="image-convert")
+
+
+def _render_stickers(photo, custom_width, custom_height, bg_color, b_sim, b_blend):
+    """CPU-bound decode/convert/serialize; runs on the worker thread."""
+    with PIL.Image.open(photo) as image:
+        tiles, tiles_width, tiles_height = converter.convert_to_images(
+            image,
+            custom_width,
+            custom_height,
+            bg_color,
+            b_sim,
+            b_blend,
+        )
+    payloads = []
+    for tile in tiles:
+        with tile:
+            buffer = io.BytesIO()
+            tile.save(buffer, format="PNG")
+            payloads.append(buffer.getvalue())
+    return payloads, tiles_width, tiles_height
 
 
 @router.message(
@@ -87,10 +112,11 @@ async def image_converter(message: Message):
             title = title_map[:50] + " w/ @" + (await message.bot.me()).username
 
 
-    stickers = []
     try:
-        tiles, tiles_width, tiles_height = converter.convert_to_images(
-            PIL.Image.open(photo),
+        payloads, tiles_width, tiles_height = await asyncio.get_running_loop().run_in_executor(
+            _IMAGE_EXECUTOR,
+            _render_stickers,
+            photo,
             custom_width,
             custom_height,
             bg_color,
@@ -103,22 +129,23 @@ async def image_converter(message: Message):
     except converter.DimensionError as e:
         await message.answer(f"❌ {str(e)}")
         return
+    except PIL.Image.DecompressionBombError:
+        await message.answer("❌ Image resolution is too large (too many pixels). Please reduce image dimensions.")
+        return
     except ValueError as e:
         await message.answer(f"❌ Invalid image: {str(e)}")
         return
-    
-    for tile in tiles:
-        sticker = io.BytesIO()
-        tile.save(sticker, format="PNG")
-        stickers.append(
-            aiogram.types.InputSticker(
-                sticker=aiogram.types.BufferedInputFile(
-                    file=sticker.getvalue(), filename="sticker.png"
-                ),
-                emoji_list=["😀"],
-                format="static",
-            )
+
+    stickers = [
+        aiogram.types.InputSticker(
+            sticker=aiogram.types.BufferedInputFile(
+                file=payload, filename="sticker.png"
+            ),
+            emoji_list=["😀"],
+            format="static",
         )
+        for payload in payloads
+    ]
     name = f"emojis_{message.from_user.id}_{utils.random_string()}_by_{(await message.bot.me()).username}"
     try:
         res = await message.bot.create_new_sticker_set(
