@@ -74,7 +74,7 @@ async def image_converter(message: Message):
         photo = await message.bot.download(message.document.file_id)
     else:
         raise ValueError("No photo or document provided")
-    custom_width, custom_height, bg_color, b_sim, b_blend = 0, 0, None, 30, 0
+    custom_width, custom_height, bg_color, b_sim, b_blend = 0, 0, None, 10, 10
     title = "Created by @" + (await message.bot.me()).username
     # Parse command arguments if present
     if message_text and message_text.startswith("/convert"):
@@ -97,15 +97,15 @@ async def image_converter(message: Message):
             custom_height = 0
         bg_color = command_map.get("b", None) # background color
         try:
-            b_sim = float(command_map.get("b_sim", "30"))
+            b_sim = float(command_map.get("b_sim", "10"))
             b_sim = max(0, min(100, b_sim)) # clamp to 0-100
         except ValueError:
-            b_sim = 30
+            b_sim = 10
         try:
-            b_blend = float(command_map.get("b_blend", "0"))
+            b_blend = float(command_map.get("b_blend", "10"))
             b_blend = max(0, min(100, b_blend)) # clamp to 0-100
         except ValueError:
-            b_blend = 0
+            b_blend = 10
         title_map = command_map.get("name", None) # name for our pack
         if title_map:
             # 64 - w/ @itosbot

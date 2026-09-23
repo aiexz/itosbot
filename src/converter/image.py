@@ -8,13 +8,13 @@ from src.converter.colors import normalize_hex_color
 from src.converter.exceptions import TileLimitError, DimensionError
 
 
-def remove_background(image: Image, bg_color: str, similarity: float = 20, blend: float = 0) -> Image:
+def remove_background(image: Image, bg_color: str, similarity: float = 10, blend: float = 10) -> Image:
     """
     Remove background color from image
     :param image: Input image
     :param bg_color: Background color as hex or name (e.g., "#FFFFFF", "FFFFFF", "white")
-    :param similarity: Color similarity threshold (0-100, default 20)
-    :param blend: Blend amount for edge smoothing (0-100, default 0)
+    :param similarity: Color similarity threshold (0-100, default 10)
+    :param blend: Blend amount for edge smoothing (0-100, default 10)
     :return: Image with background removed
     """
     # Convert image to RGBA if not already
@@ -186,15 +186,15 @@ def adjust_size(image: Image, custom_width: int = 0, custom_height: int = 0) -> 
     return image
 
 
-def convert_to_images(image: Image, custom_width: int = 0, custom_height: int = 0, bg_color: str | None = None, bg_similarity: float = 30, bg_blend: float = 0) -> tuple[list[Image], int, int]:
+def convert_to_images(image: Image, custom_width: int = 0, custom_height: int = 0, bg_color: str | None = None, bg_similarity: float = 10, bg_blend: float = 10) -> tuple[list[Image], int, int]:
     """
     Slice image to 100x100 tiles
     :param image:
     :param custom_width: Custom width in pixels (0 = auto)
     :param custom_height: Custom height in pixels (0 = auto)
     :param bg_color: Background color to remove as hex or name (e.g., "#FFFFFF", "white")
-    :param bg_similarity: Color similarity threshold (0-100, default 30)
-    :param bg_blend: Blend amount for edge smoothing (0-100, default 0)
+    :param bg_similarity: Color similarity threshold (0-100, default 10)
+    :param bg_blend: Blend amount for edge smoothing (0-100, default 10)
     :return: Tuple of (tiles, tiles_width, tiles_height)
     """
     # Convert image to RGBA if not already (preserves palette transparency)
